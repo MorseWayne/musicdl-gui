@@ -38,6 +38,17 @@ settings.json
 # Downloaded music files
 musicdl_outputs/
 
+# PyInstaller
+# Keep our main spec file but ignore generated ones
+build/
+dist/
+*.spec
+!musicdlgui.spec
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Build outputs
+*.exe
+*.zip

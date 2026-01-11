@@ -1,0 +1,23 @@
+{
+  "name": "MusicdlGUI",
+  "version": "1.0.0",
+  "description": "Music download GUI application based on musicdl",
+  "author": "Zhenchao Jin",
+  "homepage": "https://github.com/MorseWayne/musicdl-gui",
+  "license": "MIT",
+  "python_version": "3.6+",
+  "release_notes": {
+    "1.0.0": {
+      "date": "2026-01-11",
+      "changes": [
+        "Initial release",
+        "Support for multiple music platforms",
+        "Modern GUI interface",
+        "Dark/Light theme support",
+        "Flexible download configuration",
+        "Cookie support for VIP quality",
+        "Windows 32-bit and 64-bit support"
+      ]
+    }
+  }
+}

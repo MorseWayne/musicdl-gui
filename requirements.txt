@@ -1,3 +1,6 @@
 requests
 PyQt5
 musicdl
+
+# Build dependencies (optional, only needed for building executable)
+# pyinstaller

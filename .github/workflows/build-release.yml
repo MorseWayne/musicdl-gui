@@ -1,0 +1,64 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v 开头的标签时触发，例如 v1.0.0
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            python-arch: x64
+            runner: windows-latest
+          - arch: x86
+            python-arch: x86
+            runner: windows-latest
+    
+    runs-on: ${{ matrix.runner }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-arch }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        architecture: ${{ matrix.python-arch }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    
+    - name: Display Python info
+      run: |
+        python --version
+        python -c "import platform; print(f'Architecture: {platform.machine()}')"
+    
+    - name: Build with PyInstaller
+      run: |
+        python build.py ${{ matrix.arch }}
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MusicdlGUI-Windows-${{ matrix.arch }}
+        path: dist/MusicdlGUI-Windows-${{ matrix.arch }}.zip
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/MusicdlGUI-Windows-${{ matrix.arch }}.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

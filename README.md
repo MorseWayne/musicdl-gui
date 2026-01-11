@@ -53,6 +53,8 @@ pip install -r requirements.txt
 
 ## 使用方法
 
+### 方式一：直接运行 Python 脚本
+
 1. 运行程序
 
 ```bash
@@ -64,6 +66,16 @@ python musicdlgui.py
 3. 输入搜索关键词，点击 "Search" 按钮
 
 4. 在搜索结果中右键点击要下载的歌曲，选择 "Download"
+
+### 方式二：使用编译后的可执行文件（推荐）
+
+1. 从 [Releases](https://github.com/MorseWayne/musicdl-gui/releases) 页面下载对应系统的版本：
+   - `MusicdlGUI-Windows-x64.zip` - 64位 Windows 系统
+   - `MusicdlGUI-Windows-x86.zip` - 32位 Windows 系统
+
+2. 解压后双击 `MusicdlGUI.exe` 即可运行
+
+3. 无需安装 Python 环境，开箱即用
 
 ## 设置说明
 
@@ -105,6 +117,16 @@ python musicdlgui.py
 - [ ] 添加下载历史记录
 - [ ] 支持更多音乐平台
 - [ ] 优化界面设计
+
+## 开发者指南
+
+### 构建发布版本
+
+如果你想自己构建应用程序，请参考 [BUILD.md](BUILD.md) 文档，里面详细说明了：
+- 本地构建步骤
+- 如何构建 32位 和 64位版本
+- 使用 GitHub Actions 自动发布
+- 常见问题解决方案
 
 ## 贡献
 
