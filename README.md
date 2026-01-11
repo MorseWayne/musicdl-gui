@@ -108,7 +108,7 @@ python musicdlgui.py
 
 ## 截图
 
-（待添加）
+![](./resource/screenshot.png)
 
 ## 开发计划
 
