@@ -30,7 +30,7 @@ def check_dependencies():
     """检查必要的依赖是否已安装"""
     print("📦 检查依赖...")
     required_packages = {
-        'PyInstaller': 'pyinstaller',
+        'PyInstaller': 'PyInstaller',
         'PyQt5': 'PyQt5',
         'musicdl': 'musicdl',
         'requests': 'requests',
