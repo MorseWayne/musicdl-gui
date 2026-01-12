@@ -11,6 +11,7 @@ import requests
 from PyQt5.QtCore import QThread, pyqtSignal
 from musicdl import musicdl
 from musicdl.modules.utils.misc import sanitize_filepath
+from logger import log_info, log_error, log_exception, log_debug
 
 
 class SearchWorker(QThread):
@@ -19,6 +20,7 @@ class SearchWorker(QThread):
     """
     finished_sig = pyqtSignal(str, list)  # source_name, results_list
     error_sig = pyqtSignal(str, str)  # source_name, error_msg
+    client_ready_sig = pyqtSignal(object)  # music_client object
 
     def __init__(self, music_sources, keyword, settings):
         """
@@ -40,6 +42,7 @@ class SearchWorker(QThread):
         Emits finished_sig for successful searches and error_sig for failures
         """
         try:
+            log_debug(f'SearchWorker 开始执行，关键词: {self.keyword}')
             # Build config for this specific source
             init_music_clients_cfg = {}
             for source in self.music_sources:
@@ -69,17 +72,23 @@ class SearchWorker(QThread):
                 clients_threadings={s: 3 for s in self.music_sources}
             )
             
+            # Emit the music client for download use
+            self.client_ready_sig.emit(client)
+            
             results = client.search(keyword=self.keyword)
             
             for source_name, source_results in results.items():
+                log_debug(f'SearchWorker 源 {source_name} 返回 {len(source_results)} 条结果')
                 self.finished_sig.emit(source_name, source_results)
             
             # If some sources didn't return any results (even empty list), they might have failed
             for source in self.music_sources:
                 if source not in results:
+                    log_error(f'SearchWorker 源 {source} 无响应')
                     self.error_sig.emit(source, "No response")
                     
         except Exception as e:
+            log_exception(f'SearchWorker 执行出错: {str(e)}')
             for source in self.music_sources:
                 self.error_sig.emit(source, str(e))
 
@@ -113,6 +122,7 @@ class DownloadWorker(QThread):
         Emits progress_sig during download and finished_sig when complete
         """
         try:
+            log_debug(f'DownloadWorker 开始执行，歌曲: {self.song_info.get("song_name", "Unknown")}')
             download_music_file_path = sanitize_filepath(os.path.join(self.download_dir, self.filename))
             
             # Handle duplicate filenames
@@ -127,7 +137,7 @@ class DownloadWorker(QThread):
 
             headers = self.music_client.music_clients[self.song_info['source']].default_download_headers
             with requests.get(self.song_info['download_url'], headers=headers, stream=True, verify=False, timeout=60) as resp:
-                if resp.status_code == 200:
+                if resp.status_code in (200, 206):  # 200 OK or 206 Partial Content
                     total_size = int(resp.headers.get('content-length', 0))
                     chunk_size = 1024 * 16  # 16KB chunks
                     download_size = 0
@@ -147,8 +157,11 @@ class DownloadWorker(QThread):
                                 detail = f"{download_size/1024/1024:.1f}MB / Unknown"
                                 self.progress_sig.emit(0, detail)
                     
+                    log_info(f'DownloadWorker 下载完成: {download_music_file_path}')
                     self.finished_sig.emit(True, f"Finished downloading {self.song_info['song_name']}", download_music_file_path)
                 else:
+                    log_error(f'DownloadWorker 下载失败，状态码: {resp.status_code}')
                     self.finished_sig.emit(False, f"Download failed with status code: {resp.status_code}", "")
         except Exception as e:
+            log_exception(f'DownloadWorker 执行出错: {str(e)}')
             self.finished_sig.emit(False, f"Download error: {str(e)}", "")

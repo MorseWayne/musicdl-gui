@@ -6,11 +6,15 @@ Author:
 WeChat Official Account (微信公众号):
     Charles的皮卡丘
 '''
+import os
+import subprocess
+import sys
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QLineEdit, QPushButton, QRadioButton, 
                              QButtonGroup, QTextEdit, QTabWidget, QWidget, 
-                             QFileDialog)
+                             QFileDialog, QMessageBox)
+from logger import get_log_directory, get_log_file_path
 
 
 class SettingsDialog(QDialog):
@@ -43,6 +47,9 @@ class SettingsDialog(QDialog):
         
         # Download directory section
         self._init_directory_section(main_layout)
+        
+        # Log section
+        self._init_log_section(main_layout)
         
         # Cookies configuration section
         self._init_cookies_section(main_layout)
@@ -122,6 +129,78 @@ class SettingsDialog(QDialog):
         
         dir_group.setLayout(dir_layout)
         main_layout.addWidget(dir_group)
+    
+    def _init_log_section(self, main_layout):
+        """Initialize log settings section"""
+        log_group = QGroupBox('Log - 日志')
+        log_layout = QVBoxLayout()
+        log_layout.setContentsMargins(15, 20, 15, 15)
+        log_layout.setSpacing(10)
+        
+        # Log file info
+        log_file = get_log_file_path()
+        if log_file:
+            log_info_label = QLabel(f'当前日志文件: {os.path.basename(log_file)}')
+        else:
+            log_info_label = QLabel('日志文件: 尚未初始化')
+        log_info_label.setStyleSheet("color: #666666; font-size: 11px;")
+        log_layout.addWidget(log_info_label)
+        
+        # Log directory info
+        log_dir = get_log_directory()
+        log_dir_label = QLabel(f'日志目录: {log_dir}')
+        log_dir_label.setStyleSheet("color: #666666; font-size: 11px;")
+        log_dir_label.setWordWrap(True)
+        log_layout.addWidget(log_dir_label)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        
+        open_log_dir_btn = QPushButton('Open Log Folder - 打开日志目录')
+        open_log_dir_btn.setCursor(Qt.PointingHandCursor)
+        open_log_dir_btn.clicked.connect(self.open_log_directory)
+        btn_layout.addWidget(open_log_dir_btn)
+        
+        open_log_file_btn = QPushButton('Open Current Log - 打开当前日志')
+        open_log_file_btn.setCursor(Qt.PointingHandCursor)
+        open_log_file_btn.clicked.connect(self.open_log_file)
+        btn_layout.addWidget(open_log_file_btn)
+        
+        btn_layout.addStretch()
+        log_layout.addLayout(btn_layout)
+        
+        log_group.setLayout(log_layout)
+        main_layout.addWidget(log_group)
+    
+    def open_log_directory(self):
+        """Open log directory in file explorer"""
+        log_dir = get_log_directory()
+        try:
+            if sys.platform == 'win32':
+                os.startfile(log_dir)
+            elif sys.platform == 'darwin':
+                subprocess.run(['open', log_dir])
+            else:
+                subprocess.run(['xdg-open', log_dir])
+        except Exception as e:
+            QMessageBox.warning(self, 'Warning - 警告', f'无法打开日志目录: {str(e)}')
+    
+    def open_log_file(self):
+        """Open current log file"""
+        log_file = get_log_file_path()
+        if not log_file or not os.path.exists(log_file):
+            QMessageBox.information(self, 'Info - 信息', '日志文件尚未创建')
+            return
+        try:
+            if sys.platform == 'win32':
+                os.startfile(log_file)
+            elif sys.platform == 'darwin':
+                subprocess.run(['open', log_file])
+            else:
+                subprocess.run(['xdg-open', log_file])
+        except Exception as e:
+            QMessageBox.warning(self, 'Warning - 警告', f'无法打开日志文件: {str(e)}')
     
     def _init_cookies_section(self, main_layout):
         """Initialize cookies configuration section"""

@@ -9,13 +9,14 @@ WeChat Official Account (微信公众号):
 import os
 import sys
 import json
+import uuid
 from PyQt5 import QtCore
 from PyQt5.QtGui import QIcon, QCursor
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QGroupBox, QLabel, QLineEdit, QPushButton, 
-                             QCheckBox, QTableWidget, QProgressBar, QMenu, 
-                             QMessageBox, QHeaderView, QAbstractItemView, 
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+                             QGroupBox, QLabel, QLineEdit, QPushButton,
+                             QCheckBox, QTableWidget, QTableWidgetItem, QProgressBar, QMenu,
+                             QMessageBox, QHeaderView, QAbstractItemView,
                              QGridLayout, QDialog)
 from musicdl.modules.utils.misc import touchdir, sanitize_filepath
 
@@ -24,6 +25,10 @@ from styles import get_stylesheet
 from components import SortableTableWidgetItem
 from workers import SearchWorker, DownloadWorker
 from dialogs import SettingsDialog
+from logger import (setup_logger, log_app_start, log_app_exit, log_search_start,
+                   log_search_result, log_search_error, log_search_complete,
+                   log_download_start, log_download_success, log_download_error,
+                   log_settings_saved, log_theme_changed, log_info, log_error)
 
 
 class MusicdlGUI(QWidget):
@@ -32,6 +37,10 @@ class MusicdlGUI(QWidget):
     """
     def __init__(self):
         super(MusicdlGUI, self).__init__()
+        # Initialize logger
+        setup_logger()
+        log_app_start()
+        
         # Load settings first
         self.load_settings()
         
@@ -163,25 +172,44 @@ class MusicdlGUI(QWidget):
 
     def _init_table_section(self, main_layout):
         """Initialize results table section"""
+        # Table action buttons
+        table_action_layout = QHBoxLayout()
+        table_action_layout.setSpacing(10)
+        
+        self.btn_select_all = QPushButton('全选')
+        self.btn_select_all.clicked.connect(self.select_all_rows)
+
+        self.btn_deselect_all = QPushButton('取消全选')
+        self.btn_deselect_all.clicked.connect(self.deselect_all_rows)
+
+        self.btn_download_selected = QPushButton('下载选中')
+        self.btn_download_selected.clicked.connect(self.download_selected)
+        
+        table_action_layout.addWidget(self.btn_select_all)
+        table_action_layout.addWidget(self.btn_deselect_all)
+        table_action_layout.addWidget(self.btn_download_selected)
+        table_action_layout.addStretch()
+        main_layout.addLayout(table_action_layout)
+        
+        # Results table
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(7)
-        self.results_table.setHorizontalHeaderLabels(['ID', 'Singers', 'Songname', 'Filesize', 'Duration', 'Album', 'Source'])
+        self.results_table.setHorizontalHeaderLabels(['', 'Singers', 'Songname', 'Filesize', 'Duration', 'Album', 'Source'])
         
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)  # Align text to left
-        header.setSortIndicatorShown(True)  # Ensure indicator is always shown when sorting
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Checkbox column
+        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        header.setSortIndicatorShown(True)
         header.setSectionsClickable(True)
-        # Fix: Ensure arrows are visible by setting a fixed size for the indicator
-        header.setStyleSheet("QHeaderView::section { padding-right: 30px; }")  # Reserve space for arrow
+        header.setStyleSheet("QHeaderView::section { padding-right: 30px; }")
         
         self.results_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.results_table.setAlternatingRowColors(True)
         self.results_table.verticalHeader().setVisible(False)
         self.results_table.setShowGrid(False)
-        self.results_table.setSortingEnabled(True)  # Enable sorting
+        self.results_table.setSortingEnabled(True)
         main_layout.addWidget(self.results_table)
 
     def _init_progress_section(self, main_layout):
@@ -225,6 +253,7 @@ class MusicdlGUI(QWidget):
         self.settings['is_dark'] = self.is_dark
         self.save_settings()
         self.setStyleSheet(get_stylesheet(self.is_dark))
+        log_theme_changed(self.is_dark)
     
     def load_settings(self):
         """Load settings from JSON file"""
@@ -253,7 +282,9 @@ class MusicdlGUI(QWidget):
         try:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=2, ensure_ascii=False)
+            log_settings_saved()
         except Exception as e:
+            log_error(f'保存设置失败: {str(e)}')
             QMessageBox.warning(self, 'Warning - 警告', f'Failed to save settings: {str(e)}')
     
     def open_settings(self):
@@ -281,8 +312,11 @@ class MusicdlGUI(QWidget):
         """Initialize application state"""
         self.search_results = {}
         self.music_records = {}
-        self.selected_music_idx = -10000
         self.music_client = None
+        self.download_queue = []
+        self.batch_download_total = 0
+        self.batch_download_completed = 0
+        self.batch_download_success = 0
     
     def mouseclick(self):
         """Show context menu on right click"""
@@ -290,14 +324,32 @@ class MusicdlGUI(QWidget):
         self.context_menu.show()
     
     def download(self):
-        """Handle download action"""
+        """Handle download action (right-click single download)"""
         if hasattr(self, 'download_worker') and self.download_worker.isRunning():
             QMessageBox.warning(self, 'Warning - 警告', 'A download is already in progress!\n正在下载中，请稍候！')
             return
 
-        self.selected_music_idx = str(self.results_table.selectedItems()[0].row())
-        song_info = self.music_records.get(self.selected_music_idx)
+        selected_items = self.results_table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, 'Warning - 警告', 'Please select a song to download!\n请先选择要下载的歌曲！')
+            return
         
+        # Get record_id from first column of selected row
+        selected_row = selected_items[0].row()
+        checkbox_item = self.results_table.item(selected_row, 0)
+        if not checkbox_item:
+            return
+        record_id = checkbox_item.data(Qt.UserRole)
+        song_info = self.music_records.get(record_id)
+        
+        if not song_info:
+            QMessageBox.warning(self, 'Warning - 警告', 'Song info not found!\n歌曲信息未找到！')
+            return
+        
+        self._start_single_download(song_info)
+    
+    def _start_single_download(self, song_info):
+        """Start downloading a single song"""
         # Determine download directory based on user settings
         custom_work_dir = self.settings.get('work_dir', 'musicdl_outputs')
         dir_structure = self.settings.get('dir_structure', 'flat')
@@ -324,6 +376,9 @@ class MusicdlGUI(QWidget):
         self.bar_download.setValue(0)
         self.label_progress_detail.setText('Initializing...')
 
+        # Log download start
+        log_download_start(song_info['song_name'], song_info['singers'], song_info['source'])
+        
         # Start background download
         self.download_worker = DownloadWorker(song_info, download_dir, filename, self.music_client)
         self.download_worker.progress_sig.connect(self.update_download_progress)
@@ -337,14 +392,87 @@ class MusicdlGUI(QWidget):
 
     def download_finished(self, success, msg, file_path):
         """Handle download completion"""
-        self.button_keyword.setEnabled(True)
-        self.label_task_info.setText('Ready - 就绪')
         if success:
-            QMessageBox.information(self, 'Success - 成功', f"{msg}\n\nSaved to: {file_path}")
+            log_download_success(msg.replace('Finished downloading ', ''), file_path)
         else:
-            QMessageBox.critical(self, 'Error - 错误', msg)
-        self.bar_download.setValue(0)
-        self.label_progress_detail.setText('0.0MB / 0.0MB')
+            log_download_error('未知歌曲', msg)
+        
+        # Check if there are more songs in the queue
+        if hasattr(self, 'download_queue') and self.download_queue:
+            self.batch_download_completed += 1
+            if success:
+                self.batch_download_success += 1
+            
+            # Process next song in queue
+            next_song = self.download_queue.pop(0)
+            self.label_task_info.setText(f'Batch downloading ({self.batch_download_completed + 1}/{self.batch_download_total}): {next_song["song_name"]}')
+            self._start_single_download(next_song)
+        else:
+            # All downloads complete
+            self.button_keyword.setEnabled(True)
+            self.bar_download.setValue(0)
+            self.label_progress_detail.setText('0.0MB / 0.0MB')
+            
+            if hasattr(self, 'batch_download_total') and self.batch_download_total > 1:
+                self.batch_download_completed += 1
+                if success:
+                    self.batch_download_success += 1
+                self.label_task_info.setText('Ready - 就绪')
+                QMessageBox.information(self, 'Batch Complete - 批量下载完成', 
+                    f'Downloaded {self.batch_download_success}/{self.batch_download_total} songs successfully.\n'
+                    f'成功下载 {self.batch_download_success}/{self.batch_download_total} 首歌曲。')
+                self.batch_download_total = 0
+            else:
+                self.label_task_info.setText('Ready - 就绪')
+                if success:
+                    QMessageBox.information(self, 'Success - 成功', f"{msg}\n\nSaved to: {file_path}")
+                else:
+                    QMessageBox.critical(self, 'Error - 错误', msg)
+    
+    def select_all_rows(self):
+        """Select all checkboxes in the table"""
+        for row in range(self.results_table.rowCount()):
+            item = self.results_table.item(row, 0)
+            if item:
+                item.setCheckState(Qt.Checked)
+    
+    def deselect_all_rows(self):
+        """Deselect all checkboxes in the table"""
+        for row in range(self.results_table.rowCount()):
+            item = self.results_table.item(row, 0)
+            if item:
+                item.setCheckState(Qt.Unchecked)
+    
+    def download_selected(self):
+        """Download all checked songs"""
+        if hasattr(self, 'download_worker') and self.download_worker.isRunning():
+            QMessageBox.warning(self, 'Warning - 警告', 'A download is already in progress!\n正在下载中，请稍候！')
+            return
+        
+        # Collect all checked songs
+        songs_to_download = []
+        for row in range(self.results_table.rowCount()):
+            item = self.results_table.item(row, 0)
+            if item and item.checkState() == Qt.Checked:
+                record_id = item.data(Qt.UserRole)
+                song_info = self.music_records.get(record_id)
+                if song_info:
+                    songs_to_download.append(song_info)
+        
+        if not songs_to_download:
+            QMessageBox.warning(self, 'Warning - 警告', 'Please check at least one song to download!\n请至少勾选一首歌曲！')
+            return
+        
+        # Initialize batch download
+        self.download_queue = songs_to_download[1:]  # All except first
+        self.batch_download_total = len(songs_to_download)
+        self.batch_download_completed = 0
+        self.batch_download_success = 0
+        
+        # Start first download
+        first_song = songs_to_download[0]
+        self.label_task_info.setText(f'Batch downloading (1/{self.batch_download_total}): {first_song["song_name"]}')
+        self._start_single_download(first_song)
     
     def search(self):
         """Handle search action"""
@@ -398,12 +526,20 @@ class MusicdlGUI(QWidget):
         
         self.status_group.setVisible(True)
         
+        # Log search start
+        log_search_start(keyword, music_sources)
+        
         # Start search worker
         self.search_worker = SearchWorker(music_sources, keyword, self.settings)
         self.search_worker.finished_sig.connect(self.handle_source_success)
         self.search_worker.error_sig.connect(self.handle_source_error)
+        self.search_worker.client_ready_sig.connect(self.handle_client_ready)
         self.search_worker.finished.connect(self.handle_all_finished)
         self.search_worker.start()
+
+    def handle_client_ready(self, client):
+        """Handle music client ready signal"""
+        self.music_client = client
 
     def handle_source_success(self, source_name, results):
         """Handle successful search from a source"""
@@ -415,6 +551,7 @@ class MusicdlGUI(QWidget):
             label.setText(f"✅ {display_name}: Found {count}")
             label.setStyleSheet("color: #28a745; font-weight: bold;")
         self.completed_sources_count += 1
+        log_search_result(source_name, count)
 
     def handle_source_error(self, source_name, error_msg):
         """Handle search error from a source"""
@@ -425,12 +562,17 @@ class MusicdlGUI(QWidget):
             label.setToolTip(error_msg)
             label.setStyleSheet("color: #dc3545;")
         self.completed_sources_count += 1
+        log_search_error(source_name, error_msg)
 
     def handle_all_finished(self):
         """Handle completion of all searches"""
         self.button_keyword.setEnabled(True)
         self.label_task_info.setText('Ready - 就绪')
         self.display_search_results(self.all_aggregated_results)
+        
+        # Log search complete
+        total_results = sum(len(results) for results in self.all_aggregated_results.values())
+        log_search_complete(total_results)
         
         # Auto-hide status group after 5 seconds
         QTimer.singleShot(5000, lambda: self.status_group.setVisible(False))
@@ -460,6 +602,9 @@ class MusicdlGUI(QWidget):
         self.music_records = {}  # Clear old records
         for _, (_, per_source_search_results) in enumerate(self.search_results.items()):
             for _, per_source_search_result in enumerate(per_source_search_results):
+                # Generate unique ID for this record
+                record_id = str(uuid.uuid4())
+                
                 # Prepare data for sorting
                 fs_str = per_source_search_result['file_size']
                 fs_val = 0
@@ -489,8 +634,15 @@ class MusicdlGUI(QWidget):
                 except:
                     dur_val = 0
 
+                # First column: checkbox (store record_id in data)
+                checkbox_item = QTableWidgetItem()
+                checkbox_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                checkbox_item.setCheckState(Qt.Unchecked)
+                checkbox_item.setData(Qt.UserRole, record_id)  # Store unique ID
+                self.results_table.setItem(row, 0, checkbox_item)
+
+                # Other columns
                 items = [
-                    (str(row), row),
                     (per_source_search_result['singers'], per_source_search_result['singers']),
                     (per_source_search_result['song_name'], per_source_search_result['song_name']),
                     (fs_str, fs_val),
@@ -499,12 +651,12 @@ class MusicdlGUI(QWidget):
                     (per_source_search_result['source'], per_source_search_result['source'])
                 ]
 
-                for column, (text, sort_val) in enumerate(items):
+                for column, (text, sort_val) in enumerate(items, start=1):
                     table_item = SortableTableWidgetItem(text, sort_val)
                     table_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                     self.results_table.setItem(row, column, table_item)
                 
-                self.music_records.update({str(row): per_source_search_result})
+                self.music_records[record_id] = per_source_search_result
                 row += 1
         
         self.results_table.setSortingEnabled(True)
@@ -516,7 +668,9 @@ def main():
     app = QApplication(sys.argv)
     gui = MusicdlGUI()
     gui.show()
-    sys.exit(app.exec_())
+    exit_code = app.exec_()
+    log_app_exit()
+    sys.exit(exit_code)
 
 
 if __name__ == '__main__':
