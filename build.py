@@ -62,6 +62,18 @@ def create_icon_if_missing():
     print()
 
 
+def get_package_data_path(package_name, subpath=''):
+    """获取已安装包的数据文件路径"""
+    import importlib.util
+    spec = importlib.util.find_spec(package_name)
+    if spec and spec.origin:
+        package_dir = os.path.dirname(spec.origin)
+        if subpath:
+            return os.path.join(package_dir, subpath)
+        return package_dir
+    return None
+
+
 def build_exe(architecture='x64'):
     """
     使用 PyInstaller 构建可执行文件
@@ -74,9 +86,9 @@ def build_exe(architecture='x64'):
     # 根据架构设置输出目录
     dist_dir = f'dist/MusicdlGUI-{architecture}'
     
-    # PyInstaller 命令
+    # PyInstaller 命令 - 使用 python -m PyInstaller 确保正确调用
     cmd = [
-        'pyinstaller',
+        sys.executable, '-m', 'PyInstaller',
         '--name=MusicdlGUI',
         '--onefile',  # 打包成单个文件
         '--windowed',  # 不显示控制台窗口
@@ -92,6 +104,7 @@ def build_exe(architecture='x64'):
         '--hidden-import=PyQt5.QtWidgets',
         '--hidden-import=musicdl',
         '--hidden-import=requests',
+        '--hidden-import=fake_useragent',
         # 排除不需要的大型 PyQt5 模块（可减少 50-80MB）
         '--exclude-module=PyQt5.QtWebEngine',
         '--exclude-module=PyQt5.QtWebEngineCore',
@@ -128,20 +141,15 @@ def build_exe(architecture='x64'):
         '--exclude-module=PyQt5.QtTextToSpeech',
         '--exclude-module=PyQt5.QtXml',
         '--exclude-module=PyQt5.QtXmlPatterns',
-        # 排除其他不需要的模块
-        '--exclude-module=tkinter',
-        '--exclude-module=unittest',
-        '--exclude-module=email',
-        '--exclude-module=html',
-        '--exclude-module=http',
-        '--exclude-module=xml',
-        '--exclude-module=pydoc',
-        '--exclude-module=doctest',
-        '--exclude-module=argparse',
-        '--exclude-module=difflib',
-        '--exclude-module=inspect',
-        '--exclude-module=pdb',
     ]
+    
+    # 添加 fake_useragent 的数据文件（修复 "failed to load or parse browser.json" 错误）
+    fake_useragent_data = get_package_data_path('fake_useragent', 'data')
+    if fake_useragent_data and os.path.exists(fake_useragent_data):
+        cmd.append(f'--add-data={fake_useragent_data};fake_useragent/data')
+        print(f"   ✓ 添加 fake_useragent 数据文件: {fake_useragent_data}")
+    else:
+        print("   ⚠️  未找到 fake_useragent 数据文件")
     
     # 如果有图标文件，添加图标参数
     if os.path.exists('icon.ico'):
