@@ -6,6 +6,9 @@ on:
       - 'v*'  # 当推送 v 开头的标签时触发，例如 v1.0.0
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -19,6 +22,11 @@ jobs:
       with:
         python-version: '3.11'
         architecture: x64
+    
+    - name: Install UPX (for compression)
+      run: |
+        choco install upx -y
+        upx --version
     
     - name: Install dependencies
       run: |
