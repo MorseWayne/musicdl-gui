@@ -27,7 +27,27 @@ musicdl-gui 是基于 [musicdl](https://github.com/CharlesPikachu/musicdl) 开�
 - 💾 支持夸克网盘 Cookies 下载分享网站的无损音乐
 - ⚡ 优化的搜索速度和下载体验
 
-## 安装
+## 📥 下载使用 (推荐)
+
+无需安装 Python 环境，下载即可使用：
+
+1. 访问 [Releases](https://github.com/MorseWayne/musicdl-gui/releases) 页面
+2. 下载对应系统的压缩包：
+   - `MusicdlGUI-Windows-x64.zip` (64位 Windows)
+   - `MusicdlGUI-Windows-x86.zip` (32位 Windows)
+3. 解压后双击 `MusicdlGUI.exe` 即可运行
+
+## 📖 使用指南
+
+1. **运行程序**：双击 `MusicdlGUI.exe`
+2. **选择平台**：在界面上方勾选音乐平台（建议选择 2-3 个）
+3. **搜索音乐**：输入关键词，点击 "Search" 按钮
+4. **下载**：在搜索结果中右键点击要下载的歌曲，选择 "Download"
+   - 下载进度会在底部状态栏显示
+
+## 🛠️ 源码部署 (开发者)
+
+如果您是开发者或希望从源码运行：
 
 ### 依赖要求
 
@@ -45,37 +65,17 @@ git clone https://github.com/MorseWayne/musicdl-gui.git
 cd musicdl-gui
 ```
 
-2. 安装依赖
+1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
-
-## 使用方法
-
-### 方式一：直接运行 Python 脚本
 
 1. 运行程序
 
 ```bash
 python musicdlgui.py
 ```
-
-2. 选择音乐平台（建议选择 2-3 个）
-
-3. 输入搜索关键词，点击 "Search" 按钮
-
-4. 在搜索结果中右键点击要下载的歌曲，选择 "Download"
-
-### 方式二：使用编译后的可执行文件（推荐）
-
-1. 从 [Releases](https://github.com/MorseWayne/musicdl-gui/releases) 页面下载对应系统的版本：
-   - `MusicdlGUI-Windows-x64.zip` - 64位 Windows 系统
-   - `MusicdlGUI-Windows-x86.zip` - 32位 Windows 系统
-
-2. 解压后双击 `MusicdlGUI.exe` 即可运行
-
-3. 无需安装 Python 环境，开箱即用
 
 ## 设置说明
 
@@ -102,7 +102,7 @@ python musicdlgui.py
 
 用于下载米兔音乐、歌曲宝、音乐岛、布谷音乐等分享网站的无损音乐：
 
-1. 登录 https://pan.quark.cn/
+1. 登录 <https://pan.quark.cn/>
 2. 从浏览器开发者工具获取 Cookie
 3. 粘贴到夸克网盘 Cookies 配置框
 
@@ -123,6 +123,7 @@ python musicdlgui.py
 ### 构建发布版本
 
 如果你想自己构建应用程序，请参考 [BUILD.md](BUILD.md) 文档，里面详细说明了：
+
 - 本地构建步骤
 - 如何构建 32位 和 64位版本
 - 使用 GitHub Actions 自动发布
