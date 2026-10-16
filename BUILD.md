@@ -62,13 +62,13 @@
 python -m PyInstaller --clean musicdlgui.spec
 ```
 
-spec 使用当前环境收集 musicdl、fake_useragent、curl_cffi 和 nodejs_wheel，
+spec 使用当前环境收集 musicdl、fake_useragent、curl_cffi、nodejs_wheel 和 av，
 不再引用某台机器上的绝对路径。搜索与下载使用子进程，入口必须保留
 `multiprocessing.freeze_support()`。打包后应验证启动、搜索、取消和关闭窗口；
 源码测试不能代替 Windows 可执行文件验收。
 
 发布工作流先运行回归测试，再构建并执行 `MusicdlGUI.exe --smoke-test <报告路径>`。
-该检查离线验证界面启动、六个来源初始化、冻结程序的下载子进程及文件保存；
+该检查离线验证界面启动、六个来源初始化、冻结程序的下载子进程、WAV / MP3 转换及文件保存；
 只有检查通过才创建 Release。真实平台接口可用性仍需联网诊断验证。
 
 ### 构建输出

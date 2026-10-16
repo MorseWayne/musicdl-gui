@@ -12,11 +12,12 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QLineEdit, QPushButton, QCheckBox, QTableWidget, QTableWidgetItem,
     QProgressBar, QMenu, QMessageBox, QHeaderView, QAbstractItemView,
-    QGridLayout, QDialog, QShortcut, QPlainTextEdit,
+    QGridLayout, QDialog, QShortcut, QPlainTextEdit, QComboBox,
 )
 
 import app_config
 from backend import safe_filename, song_filename
+from audio_conversion import OUTPUT_FORMATS
 from components import SortableTableWidgetItem, size_value, duration_value
 from dialogs import SettingsDialog
 from logger import setup_logger, log_app_start, log_app_exit, log_info, log_error
@@ -129,7 +130,7 @@ class MusicdlGUI(QWidget):
         layout.addLayout(actions)
 
         self.results_table = QTableWidget(0, 9)
-        self.results_table.setHorizontalHeaderLabels(['选择', '歌曲', '歌手', '专辑', '时长', '大小', '格式', '来源', '下载状态'])
+        self.results_table.setHorizontalHeaderLabels(['选择', '歌曲', '歌手', '专辑', '时长', '大小', '源格式', '来源', '下载状态'])
         table_header = self.results_table.horizontalHeader()
         table_header.setSectionResizeMode(QHeaderView.ResizeToContents)
         for column in (1, 2, 3):
@@ -172,6 +173,14 @@ class MusicdlGUI(QWidget):
         self.status_label.setObjectName('mutedLabel')
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label, 1)
+        footer.addWidget(QLabel('保存格式'))
+        self.output_format_combo = QComboBox()
+        for value, label in OUTPUT_FORMATS.items():
+            self.output_format_combo.addItem(label, value)
+        self.output_format_combo.setCurrentIndex(self.output_format_combo.findData(self.settings['output_format']))
+        self.output_format_combo.setToolTip('下载后自动转换，仅保存目标文件。MP3 转换使用 320 kbps；已是该格式时保留原音频。')
+        self.output_format_combo.currentIndexChanged.connect(self.change_output_format)
+        footer.addWidget(self.output_format_combo)
         footer.addWidget(QPushButton('打开下载目录', clicked=self.open_download_directory))
         layout.addLayout(footer)
         QShortcut('Ctrl+L', self, activated=self.lineedit_keyword.setFocus)
@@ -203,11 +212,18 @@ class MusicdlGUI(QWidget):
         dialog = SettingsDialog(self, self.settings)
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
+            self.output_format_combo.blockSignals(True)
+            self.output_format_combo.setCurrentIndex(self.output_format_combo.findData(self.settings['output_format']))
+            self.output_format_combo.blockSignals(False)
             self.is_dark = self.settings['is_dark']
             self.setStyleSheet(get_stylesheet(self.is_dark))
             if self.persist_settings():
                 self.label_task_info.setText('设置已保存。Cookie 修改将在下一次搜索时生效。')
             self.update_directory_label()
+
+    def change_output_format(self):
+        self.settings['output_format'] = self.output_format_combo.currentData()
+        self.persist_settings()
 
     def update_directory_label(self):
         structure = {'flat': '平铺', 'source': '按来源', 'date': '按日期和关键词'}[self.settings['dir_structure']]
@@ -387,6 +403,7 @@ class MusicdlGUI(QWidget):
         self.btn_retry_download.setEnabled(not downloading)
         self.btn_cancel_download.setEnabled(downloading and not self._download_cancelled)
         self.button_settings.setEnabled(not searching and not downloading)
+        self.output_format_combo.setEnabled(not downloading)
         self.button_keyword.setText('取消搜索' if searching else '搜索')
         self.button_keyword.setEnabled((not downloading or searching) and not (searching and self._search_cancelled))
         self.lineedit_keyword.setEnabled(not searching and not downloading)
@@ -444,6 +461,7 @@ class MusicdlGUI(QWidget):
         self.batch_completed = self.batch_success = 0
         self.batch_errors = []
         self._download_cancelled = False
+        self.batch_output_format = self.settings.get('output_format', 'original')
         for record_id in record_ids:
             self.failed_downloads.discard(record_id)
             self.set_download_status(record_id, '等待下载')
@@ -462,12 +480,22 @@ class MusicdlGUI(QWidget):
         self.label_task_info.setText(f"正在下载 {self.batch_completed + 1}/{self.batch_total}：{song['song_name']} · {song['singers']}")
         self.bar_download.setRange(0, 0)
         self.label_progress_detail.setText('正在连接…')
-        self.download_worker = DownloadWorker(song, str(directory), song_filename(song), self)
+        self.download_worker = DownloadWorker(song, str(directory), song_filename(song), self,
+                                              output_format=self.batch_output_format)
         self.download_worker.progress_sig.connect(self.download_progress)
+        self.download_worker.phase_sig.connect(self.download_phase)
         self.download_worker.result_sig.connect(self.download_result)
         self.download_worker.finished.connect(self.download_finished)
         self.download_worker.start()
         self.update_actions()
+
+    def download_phase(self, phase, detail):
+        if self._download_cancelled:
+            return
+        song = self.music_records[self.active_record]
+        self.set_download_status(self.active_record, '转换中' if phase == 'convert' else '下载中')
+        self.label_task_info.setText(f"{detail} {self.batch_completed + 1}/{self.batch_total}：{song['song_name']} · {song['singers']}")
+        self.bar_download.setRange(0, 0)
 
     def download_progress(self, percent, detail):
         self.bar_download.setRange(0, 0 if percent < 0 else 100)

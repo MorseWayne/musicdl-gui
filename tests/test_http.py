@@ -5,6 +5,7 @@ import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+import av
 
 from workers import DownloadWorker
 
@@ -71,3 +72,17 @@ def test_truncated_http_transfer_leaves_no_music_file(audio_server, tmp_path, wa
     wait_until(lambda: not worker.isRunning())
     assert not result[0][0]
     assert not list(tmp_path.iterdir())
+
+
+def test_http_download_then_mp3_conversion(audio_server, tmp_path, wait_until):
+    url, _, _ = audio_server
+    worker = DownloadWorker({'download_url': url + '/audio'}, str(tmp_path), 'track.wav', output_format='mp3')
+    result = []
+    worker.result_sig.connect(lambda *args: result.append(args))
+    worker.start()
+    wait_until(lambda: not worker.isRunning())
+    assert result[0][0]
+    assert list(tmp_path.iterdir()) == [tmp_path / 'track.mp3']
+    with av.open(str(tmp_path / 'track.mp3')) as output:
+        assert output.format.name == 'mp3'
+        assert next(output.decode(audio=0), None) is not None

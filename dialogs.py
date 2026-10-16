@@ -13,7 +13,8 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QLineEdit, QPushButton, QRadioButton, 
                              QButtonGroup, QTextEdit, QTabWidget, QWidget, 
-                             QFileDialog, QMessageBox, QSpinBox, QScrollArea)
+                             QFileDialog, QMessageBox, QSpinBox, QScrollArea, QComboBox)
+from audio_conversion import OUTPUT_FORMATS
 from app_config import SOURCES, normalize_settings
 from logger import get_log_directory, get_log_file_path
 
@@ -121,6 +122,21 @@ class SettingsDialog(QDialog):
         path_layout.addWidget(self.dir_edit)
         path_layout.addWidget(self.dir_button)
         dir_layout.addLayout(path_layout)
+
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel('保存格式'))
+        self.output_format_combo = QComboBox()
+        for value, label in OUTPUT_FORMATS.items():
+            self.output_format_combo.addItem(label, value)
+        index = self.output_format_combo.findData(self.current_settings.get('output_format', 'original'))
+        self.output_format_combo.setCurrentIndex(max(0, index))
+        format_layout.addWidget(self.output_format_combo)
+        format_layout.addStretch()
+        dir_layout.addLayout(format_layout)
+        format_hint = QLabel('下载后自动转换，仅保存目标文件。WAV 文件较大；MP3 转换时使用 320 kbps，已有 MP3 保持原码率。')
+        format_hint.setObjectName('mutedLabel')
+        format_hint.setWordWrap(True)
+        dir_layout.addWidget(format_hint)
         
         # Directory structure options
         dir_layout.addWidget(QLabel('文件组织方式'))
@@ -332,6 +348,7 @@ class SettingsDialog(QDialog):
             **self.current_settings,
             'work_dir': directory,
             'dir_structure': dir_structure,
+            'output_format': self.output_format_combo.currentData(),
             'is_dark': self.dark_theme_radio.isChecked(),
             'cookies': {},
             'search_limit': self.search_limit.value(),

@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 from pathlib import Path
 
 datas, binaries, hiddenimports = [], [], []
-for package in ('musicdl', 'fake_useragent', 'curl_cffi', 'nodejs_wheel'):
+for package in ('musicdl', 'fake_useragent', 'curl_cffi', 'nodejs_wheel', 'av'):
     package_data, package_binaries, package_imports = collect_all(package)
     datas.extend(package_data)
     binaries.extend(package_binaries)

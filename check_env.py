@@ -14,7 +14,7 @@ def check_environment():
     ok = sys.version_info >= (3, 10)
     if not ok:
         print('需要 Python 3.10+，建议使用 3.11 或 3.12。')
-    for package, module in [('PyQt5', 'PyQt5.QtWidgets'), ('requests', 'requests'), ('musicdl', 'musicdl.modules')]:
+    for package, module in [('PyQt5', 'PyQt5.QtWidgets'), ('requests', 'requests'), ('musicdl', 'musicdl.modules'), ('av', 'av')]:
         try:
             imported = importlib.import_module(module)
             installed = version(package)
@@ -23,11 +23,14 @@ def check_environment():
                 assert callable(imported.SongInfo.todict)
                 if installed != '2.14.0':
                     print(f'警告：musicdl {installed}，本项目验证版本为 2.14.0。')
+            if package == 'av':
+                for encoder in ('pcm_s16le', 'pcm_s32le', 'libmp3lame'):
+                    imported.codec.Codec(encoder, 'w')
             print(f'✓ {package} {installed}')
         except Exception as error:
             print(f'✗ {package}: {type(error).__name__}: {error}')
             ok = False
-    for filename in ('musicdlgui.py', 'workers.py', 'backend.py', 'app_config.py', 'components.py', 'dialogs.py', 'styles.py', 'logger.py'):
+    for filename in ('musicdlgui.py', 'workers.py', 'backend.py', 'audio_conversion.py', 'app_config.py', 'components.py', 'dialogs.py', 'styles.py', 'logger.py'):
         if not Path(__file__).with_name(filename).is_file():
             print(f'✗ 缺少文件：{filename}')
             ok = False

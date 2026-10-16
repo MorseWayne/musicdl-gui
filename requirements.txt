@@ -2,6 +2,8 @@ requests>=2.32,<3
 PyQt5==5.15.11
 # Search result models and provider APIs change between releases.
 musicdl==2.14.0
+# Audio conversion; the wheel includes FFmpeg libraries (no ffmpeg CLI required).
+av==17.1.0
 
 # Build dependencies (optional, only needed for building executable)
 # pyinstaller

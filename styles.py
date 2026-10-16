@@ -113,7 +113,7 @@ def get_stylesheet(is_dark=False):
     }}
 
     /* LineEdit and TextEdit */
-    QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox {{
+    QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QComboBox {{
         border: 1px solid {border_color};
         border-radius: 8px;
         padding: 10px;

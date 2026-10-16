@@ -107,13 +107,15 @@ class SearchWorker(QThread):
 
 class DownloadWorker(QThread):
     progress_sig = pyqtSignal(int, str)
+    phase_sig = pyqtSignal(str, str)
     result_sig = pyqtSignal(bool, str, str)
 
-    def __init__(self, song_info, download_dir, filename, parent=None):
+    def __init__(self, song_info, download_dir, filename, parent=None, output_format='original'):
         super().__init__(parent)
         self.song_info = copy.deepcopy(song_info)
         self.download_dir = Path(download_dir)
         self.filename = filename
+        self.output_format = output_format
 
     def run(self):
         try:
@@ -121,21 +123,25 @@ class DownloadWorker(QThread):
             # Keep staging on the destination filesystem for atomic publication.
             with tempfile.TemporaryDirectory(prefix='.musicdl-', dir=self.download_dir) as temporary:
                 staging = str(Path(temporary) / 'audio.part')
-                job = ProcessJob('download', {'song': self.song_info, 'staging_path': staging})
+                job = ProcessJob('download', {'song': self.song_info, 'staging_path': staging,
+                                              'output_format': self.output_format})
                 try:
                     while True:
                         if self.isInterruptionRequested():
                             self.result_sig.emit(False, '已取消下载', '')
                             break
                         if time.monotonic() - job.started > 600:
-                            self.result_sig.emit(False, '下载超过 10 分钟，已停止，请重试', '')
+                            self.result_sig.emit(False, '下载或转换超过 10 分钟，已停止，请重试', '')
                             break
                         message = job.receive()
                         if message:
                             if message[0] == 'progress':
                                 self.progress_sig.emit(*message[1:])
+                            elif message[0] == 'phase':
+                                self.phase_sig.emit(*message[1:])
                             elif message[0] == 'result':
-                                path = publish_download(staging, self.download_dir, self.filename)
+                                filename = self.filename if self.output_format == 'original' else str(Path(self.filename).with_suffix('.' + self.output_format))
+                                path = publish_download(message[1], self.download_dir, filename)
                                 self.result_sig.emit(True, '下载完成', path)
                                 break
                             else:

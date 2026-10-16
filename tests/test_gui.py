@@ -1,4 +1,5 @@
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
+from pathlib import Path
 import pytest
 
 import app_config
@@ -134,9 +135,25 @@ def test_close_cancels_before_destroying_worker(window, app):
 def test_settings_preserve_source_preferences(window):
     dialog = SettingsDialog(window, window.settings)
     dialog.search_limit.setValue(8)
+    dialog.output_format_combo.setCurrentIndex(dialog.output_format_combo.findData('wav'))
     dialog.save_settings()
     assert dialog.get_settings()['selected_sources'] == window.settings['selected_sources']
     assert dialog.get_settings()['search_limit'] == 8
+    assert dialog.get_settings()['output_format'] == 'wav'
+
+
+def test_batch_output_format_from_main_window_is_applied_and_locked(window, wait_until, flac_audio):
+    window.output_format_combo.setCurrentIndex(window.output_format_combo.findData('mp3'))
+    assert window.settings['output_format'] == 'mp3'
+    window.append_results([song('A', downloaded_contents=flac_audio[0], ext='flac'),
+                           song('B', downloaded_contents=flac_audio[0], ext='flac')])
+    window.start_downloads(list(window.music_records))
+    assert not window.output_format_combo.isEnabled()
+    wait_until(lambda: window.download_worker is None)
+    assert window.batch_success == 2
+    assert window.output_format_combo.isEnabled()
+    files = list(Path(window.settings['work_dir']).iterdir())
+    assert len(files) == 2 and all(path.suffix == '.mp3' for path in files)
 
 
 def test_numeric_sorting():

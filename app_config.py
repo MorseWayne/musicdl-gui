@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from PyQt5.QtCore import QStandardPaths
+from audio_conversion import OUTPUT_FORMATS
 
 
 SOURCES = {
@@ -37,6 +38,7 @@ def default_settings():
     return {
         'work_dir': str(Path(music_dir or str(Path.home() / 'Music')) / 'Musicdl'),
         'dir_structure': 'flat',
+        'output_format': 'original',
         'is_dark': False,
         'cookies': {},
         'quark_cookies': '',
@@ -56,6 +58,8 @@ def normalize_settings(raw, base_dir=None):
         settings['work_dir'] = str((Path(base_dir or application_dir()) / path).resolve())
     if raw.get('dir_structure') in ('flat', 'source', 'date'):
         settings['dir_structure'] = raw['dir_structure']
+    if isinstance(raw.get('output_format'), str) and raw['output_format'] in OUTPUT_FORMATS:
+        settings['output_format'] = raw['output_format']
     settings['is_dark'] = raw.get('is_dark') is True
     for key, low, high in [('search_limit', 1, 30), ('search_timeout', 15, 180)]:
         value = raw.get(key)

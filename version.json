@@ -1,12 +1,23 @@
 {
   "name": "MusicdlGUI",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Music download GUI application based on musicdl",
   "author": "Zhenchao Jin",
   "homepage": "https://github.com/MorseWayne/musicdl-gui",
   "license": "MIT",
   "python_version": "3.10+",
   "release_notes": {
+    "1.2.0": {
+      "date": "2026-10-16",
+      "changes": [
+        "新增保存格式选择，支持保留原格式、WAV 和 MP3",
+        "单首与批量下载完成后自动转换，只保存目标格式文件",
+        "WAV 保留解码精度，MP3 转换使用 320 kbps，已有同格式音频不重复编码",
+        "转换支持进度、取消、失败提示和临时文件清理",
+        "内置 PyAV 音频转换组件，无需另外安装 FFmpeg 命令",
+        "补充真实音频转换回归测试及 Windows exe 转换冒烟检查"
+      ]
+    },
     "1.1.0": {
       "date": "2026-10-16",
       "changes": [

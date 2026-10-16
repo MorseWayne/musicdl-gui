@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
+from audio_conversion import OUTPUT_FORMATS, convert_audio
 
 
 class BackendError(Exception):
@@ -194,14 +195,37 @@ def publish_download(staging_path, directory, filename):
     return str(candidate)
 
 
+def prepare_download(song, staging_path, output_format, report, phase):
+    """Download and optionally convert; only return a fully prepared file."""
+    if output_format not in OUTPUT_FORMATS:
+        raise BackendError('不支持的保存格式，请重新选择')
+    phase('download', '正在下载')
+    download_song(song, staging_path, report)
+    if output_format == 'original':
+        return staging_path
+    phase('convert', f'正在转换为 {output_format.upper()}')
+    report(-1, '正在读取音频…')
+    try:
+        return convert_audio(staging_path, str(Path(staging_path).with_suffix('.' + output_format)),
+                             output_format, report, {
+                                 'title': song.get('song_name'), 'artist': song.get('singers'),
+                                 'album': song.get('album'),
+                             })
+    except ImportError as error:
+        raise BackendError('无法加载音频转换组件，请重新安装完整依赖或使用完整安装包') from error
+    except Exception as error:
+        raise BackendError(f'转换为 {output_format.upper()} 失败：{safe_error(error)}') from error
+
+
 def execute_job(connection, kind, arguments):
     """Spawn entry point: no Qt widgets or live clients cross processes."""
     try:
         if kind == 'search':
             result = search_source(**arguments)
         else:
-            download_song(**arguments, report=lambda percent, detail: connection.send(('progress', percent, detail)))
-            result = None
+            result = prepare_download(**arguments,
+                                      report=lambda percent, detail: connection.send(('progress', percent, detail)),
+                                      phase=lambda name, detail: connection.send(('phase', name, detail)))
         connection.send(('result', result))
     except Exception as error:
         connection.send(('error', safe_error(error)))

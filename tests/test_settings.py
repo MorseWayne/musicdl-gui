@@ -58,3 +58,10 @@ def test_failed_migration_still_uses_legacy_preferences(monkeypatch, tmp_path):
     monkeypatch.setattr(app_config, 'save_settings', fail)
     settings, warning = app_config.load_settings(tmp_path / 'new.json', legacy)
     assert settings['is_dark'] and '迁移' in warning
+
+
+@pytest.mark.parametrize('value,expected', [('wav', 'wav'), ('mp3', 'mp3'), ('original', 'original'),
+                                           ('unsupported', 'original'), (None, 'original'), ([], 'original')])
+def test_output_format_is_validated_and_old_settings_keep_original(value, expected):
+    assert app_config.normalize_settings({'output_format': value})['output_format'] == expected
+    assert app_config.normalize_settings({})['output_format'] == 'original'
