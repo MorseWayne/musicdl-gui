@@ -18,18 +18,6 @@ def get_stylesheet(is_dark=False):
     Returns:
         str: CSS stylesheet string
     """
-    # SVG Icons for sort arrows
-    if is_dark:
-        arrow_color = "white"
-        active_arrow_color = "#0078d4"
-    else:
-        arrow_color = "#666666"
-        active_arrow_color = "#0078d4"
-    
-    # Simple SVG arrows as base64
-    up_arrow = f"url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"{arrow_color}\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 15l-6-6-6 6\"/></svg>')"
-    down_arrow = f"url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"{arrow_color}\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 9l6 6 6-6\"/></svg>')"
-    
     if is_dark:
         bg_color = "#1e1e1e"
         secondary_bg = "#2d2d2d"
@@ -65,6 +53,14 @@ def get_stylesheet(is_dark=False):
         font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
         font-size: 14px;
     }}
+    QLabel#appTitle {{
+        font-size: 28px;
+        font-weight: bold;
+        color: #3299ed;
+    }}
+    QLabel#mutedLabel {{ color: {secondary_text}; font-size: 12px; }}
+    QPlainTextEdit#errorLabel {{ color: {'#ff9c95' if is_dark else '#b42318'}; font-size: 12px; }}
+    QScrollArea {{ border: none; }}
 
     /* GroupBox */
     QGroupBox {{
@@ -72,7 +68,7 @@ def get_stylesheet(is_dark=False):
         border: 1px solid {border_color};
         border-radius: 10px;
         margin-top: 15px;
-        padding-top: 20px;
+        padding-top: 10px;
     }}
     QGroupBox::title {{
         subcontrol-origin: margin;
@@ -87,7 +83,7 @@ def get_stylesheet(is_dark=False):
         background-color: {secondary_bg};
         border: 1px solid {border_color};
         border-radius: 8px;
-        padding: 8px 20px;
+        padding: 7px 12px;
         min-height: 24px;
         color: {text_color};
     }}
@@ -110,9 +106,14 @@ def get_stylesheet(is_dark=False):
     QPushButton#primaryButton:pressed, QPushButton#button_keyword:pressed {{
         background-color: {primary_button_pressed};
     }}
+    QPushButton:disabled, QPushButton#primaryButton:disabled, QPushButton#button_keyword:disabled {{
+        background-color: {secondary_bg};
+        color: {secondary_text};
+        border: 1px solid {border_color};
+    }}
 
     /* LineEdit and TextEdit */
-    QLineEdit, QTextEdit {{
+    QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox {{
         border: 1px solid {border_color};
         border-radius: 8px;
         padding: 10px;
@@ -136,13 +137,13 @@ def get_stylesheet(is_dark=False):
         alternate-background-color: {secondary_bg};
     }}
     QTableWidget::item {{
-        padding: 12px;
+        padding: 6px;
         border-bottom: 1px solid {border_color};
     }}
     QHeaderView::section {{
         background-color: {table_header_bg};
         color: {text_color};
-        padding: 12px 30px 12px 15px; /* Added more right padding for arrow */
+        padding: 10px 18px 10px 8px;
         border: none;
         border-bottom: 2px solid {border_color};
         font-weight: bold;
@@ -156,24 +157,6 @@ def get_stylesheet(is_dark=False):
     QHeaderView::section:pressed {{
         background-color: {border_color};
     }}
-    /* Style sort indicators */
-    QHeaderView::up-arrow {{
-        image: {up_arrow};
-        subcontrol-origin: padding;
-        subcontrol-position: center right;
-        width: 12px;
-        height: 12px;
-        right: 10px;
-    }}
-    QHeaderView::down-arrow {{
-        image: {down_arrow};
-        subcontrol-origin: padding;
-        subcontrol-position: center right;
-        width: 12px;
-        height: 12px;
-        right: 10px;
-    }}
-
     /* Progress Bar */
     QProgressBar {{
         border: none;
@@ -224,6 +207,11 @@ def get_stylesheet(is_dark=False):
     QCheckBox::indicator, QRadioButton::indicator {{
         width: 20px;
         height: 20px;
+    }}
+    QCheckBox::indicator:unchecked, QTableView::indicator:unchecked {{
+        background-color: {input_bg};
+        border: 1px solid {secondary_text};
+        border-radius: 3px;
     }}
 
     /* ScrollBar */

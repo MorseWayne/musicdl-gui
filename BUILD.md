@@ -15,8 +15,8 @@
 ### 本地构建需要
 
 1. **Python 环境**
-   - Python 3.6 或更高版本
-   - 推荐使用 Python 3.11
+   - Python 3.10 或更高版本
+   - 推荐使用 Python 3.11 / 3.12 x64；依赖版本见 requirements.txt
 
 2. **必需的 Python 包**
    ```bash
@@ -59,16 +59,17 @@
 ### 方法二：直接使用 PyInstaller
 
 ```bash
-# 64位版本
-pyinstaller --name=MusicdlGUI --onefile --windowed --clean ^
-    --distpath=dist/MusicdlGUI-x64 ^
-    --add-data=components.py;. ^
-    --add-data=dialogs.py;. ^
-    --add-data=styles.py;. ^
-    --add-data=workers.py;. ^
-    --icon=icon.ico ^
-    musicdlgui.py
+python -m PyInstaller --clean musicdlgui.spec
 ```
+
+spec 使用当前环境收集 musicdl、fake_useragent、curl_cffi 和 nodejs_wheel，
+不再引用某台机器上的绝对路径。搜索与下载使用子进程，入口必须保留
+`multiprocessing.freeze_support()`。打包后应验证启动、搜索、取消和关闭窗口；
+源码测试不能代替 Windows 可执行文件验收。
+
+发布工作流先运行回归测试，再构建并执行 `MusicdlGUI.exe --smoke-test <报告路径>`。
+该检查离线验证界面启动、六个来源初始化、冻结程序的下载子进程及文件保存；
+只有检查通过才创建 Release。真实平台接口可用性仍需联网诊断验证。
 
 ### 构建输出
 
@@ -87,7 +88,7 @@ dist/
 
 ## 自动化构建（GitHub Actions）
 
-本项目配置了 GitHub Actions 自动构建工作流，可以自动构建 32位 和 64位版本。
+当前 GitHub Actions 工作流构建 Windows x64。x86 需要单独验证依赖的架构支持。
 
 ### 触发方式
 
@@ -100,7 +101,7 @@ dist/
    ```
 
 2. GitHub Actions 会自动：
-   - 构建 32位 和 64位版本
+   - 构建 Windows x64 版本
    - 创建 GitHub Release
    - 上传构建的安装包到 Release
 

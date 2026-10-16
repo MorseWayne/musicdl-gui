@@ -16,7 +16,6 @@ def clean_build():
     """清理之前的构建文件"""
     print("🧹 清理旧的构建文件...")
     dirs_to_clean = ['build', 'dist']
-    files_to_clean = ['musicdlgui.spec']
     
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
@@ -86,76 +85,11 @@ def build_exe(architecture='x64'):
     # 根据架构设置输出目录
     dist_dir = f'dist/MusicdlGUI-{architecture}'
     
-    # PyInstaller 命令 - 使用 python -m PyInstaller 确保正确调用
+    # Keep local and CI packaging on the same checked-in specification.
     cmd = [
         sys.executable, '-m', 'PyInstaller',
-        '--name=MusicdlGUI',
-        '--onefile',  # 打包成单个文件
-        '--windowed',  # 不显示控制台窗口
-        '--clean',
-        f'--distpath={dist_dir}',
-        '--add-data=components.py;.',
-        '--add-data=dialogs.py;.',
-        '--add-data=styles.py;.',
-        '--add-data=workers.py;.',
-        '--hidden-import=PyQt5',
-        '--hidden-import=PyQt5.QtCore',
-        '--hidden-import=PyQt5.QtGui',
-        '--hidden-import=PyQt5.QtWidgets',
-        '--hidden-import=musicdl',
-        '--hidden-import=requests',
-        '--hidden-import=fake_useragent',
-        # 排除不需要的大型 PyQt5 模块（可减少 50-80MB）
-        '--exclude-module=PyQt5.QtWebEngine',
-        '--exclude-module=PyQt5.QtWebEngineCore',
-        '--exclude-module=PyQt5.QtWebEngineWidgets',
-        '--exclude-module=PyQt5.QtWebChannel',
-        '--exclude-module=PyQt5.QtWebSockets',
-        '--exclude-module=PyQt5.QtNetwork',
-        '--exclude-module=PyQt5.QtQml',
-        '--exclude-module=PyQt5.QtQuick',
-        '--exclude-module=PyQt5.QtQuickWidgets',
-        '--exclude-module=PyQt5.Qt3DCore',
-        '--exclude-module=PyQt5.Qt3DRender',
-        '--exclude-module=PyQt5.Qt3DInput',
-        '--exclude-module=PyQt5.Qt3DLogic',
-        '--exclude-module=PyQt5.Qt3DAnimation',
-        '--exclude-module=PyQt5.Qt3DExtras',
-        '--exclude-module=PyQt5.QtBluetooth',
-        '--exclude-module=PyQt5.QtDBus',
-        '--exclude-module=PyQt5.QtDesigner',
-        '--exclude-module=PyQt5.QtHelp',
-        '--exclude-module=PyQt5.QtLocation',
-        '--exclude-module=PyQt5.QtMultimedia',
-        '--exclude-module=PyQt5.QtMultimediaWidgets',
-        '--exclude-module=PyQt5.QtNfc',
-        '--exclude-module=PyQt5.QtOpenGL',
-        '--exclude-module=PyQt5.QtPositioning',
-        '--exclude-module=PyQt5.QtPrintSupport',
-        '--exclude-module=PyQt5.QtRemoteObjects',
-        '--exclude-module=PyQt5.QtSensors',
-        '--exclude-module=PyQt5.QtSerialPort',
-        '--exclude-module=PyQt5.QtSql',
-        '--exclude-module=PyQt5.QtSvg',
-        '--exclude-module=PyQt5.QtTest',
-        '--exclude-module=PyQt5.QtTextToSpeech',
-        '--exclude-module=PyQt5.QtXml',
-        '--exclude-module=PyQt5.QtXmlPatterns',
+        '--clean', f'--distpath={dist_dir}', 'musicdlgui.spec',
     ]
-    
-    # 添加 fake_useragent 的数据文件（修复 "failed to load or parse browser.json" 错误）
-    fake_useragent_data = get_package_data_path('fake_useragent', 'data')
-    if fake_useragent_data and os.path.exists(fake_useragent_data):
-        cmd.append(f'--add-data={fake_useragent_data};fake_useragent/data')
-        print(f"   ✓ 添加 fake_useragent 数据文件: {fake_useragent_data}")
-    else:
-        print("   ⚠️  未找到 fake_useragent 数据文件")
-    
-    # 如果有图标文件，添加图标参数
-    if os.path.exists('icon.ico'):
-        cmd.append('--icon=icon.ico')
-    
-    cmd.append('musicdlgui.py')
     
     print(f"   执行命令: {' '.join(cmd)}\n")
     
@@ -174,14 +108,15 @@ def create_release_package(architecture='x64'):
     print(f"\n📦 创建发布包...")
     
     dist_dir = Path(f'dist/MusicdlGUI-{architecture}')
-    if not dist_dir.exists():
-        print(f"   ✗ 输出目录不存在: {dist_dir}")
+    if not (dist_dir / 'MusicdlGUI.exe').is_file():
+        print(f"   ✗ 可执行文件不存在: {dist_dir / 'MusicdlGUI.exe'}")
         return False
     
     # 复制必要的文件到发布目录
     files_to_copy = [
         ('README.md', 'README.md'),
         ('LICENSE', 'LICENSE'),
+        ('version.json', 'version.json'),
     ]
     
     for src, dst in files_to_copy:
@@ -199,11 +134,12 @@ def create_release_package(architecture='x64'):
 首次使用：
 1. 选择音乐平台（建议选择 2-3 个）
 2. 输入搜索关键词
-3. 在搜索结果中右键选择要下载的歌曲
-4. 点击 "Settings" 可以配置下载目录和 Cookies
+3. 勾选歌曲，点击“下载选中”，也可以右键下载
+4. 点击“设置”配置下载目录、搜索时限和 Cookies
 
 注意事项：
-- 下载的音乐文件默认保存在程序目录下的 musicdl_outputs 文件夹
+- 新安装默认保存到用户音乐目录的 Musicdl 文件夹，升级时保留原下载目录
+- 各来源独立搜索，可取消、筛选结果、重试失败来源或下载
 - 可以在设置中配置各平台的 Cookies 以获取更高音质
 - 本程序仅供学习和教育使用，请勿用于商业用途
 
@@ -227,6 +163,7 @@ def create_release_package(architecture='x64'):
 
 def main():
     """主函数"""
+    os.chdir(Path(__file__).resolve().parent)
     print("=" * 60)
     print("MusicdlGUI 构建脚本")
     print("=" * 60)
@@ -270,7 +207,8 @@ def main():
     success = build_exe(arch)
     
     if success:
-        create_release_package(arch)
+        if not create_release_package(arch):
+            sys.exit(1)
         print("\n" + "=" * 60)
         print("✅ 构建完成!")
         print("=" * 60)

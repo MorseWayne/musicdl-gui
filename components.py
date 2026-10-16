@@ -6,7 +6,29 @@ Author:
 WeChat Official Account (微信公众号):
     Charles的皮卡丘
 '''
+import re
 from PyQt5.QtWidgets import QTableWidgetItem
+
+
+def size_value(text):
+    match = re.fullmatch(r'\s*([\d.]+)\s*([KMGT]?I?B)?\s*', str(text), re.IGNORECASE)
+    if not match:
+        return 0
+    try:
+        unit = (match.group(2) or 'B').upper().replace('I', '')
+        return float(match.group(1)) * 1024 ** ['B', 'KB', 'MB', 'GB', 'TB'].index(unit)
+    except ValueError:
+        return 0
+
+
+def duration_value(text):
+    try:
+        value = 0
+        for part in str(text).split(':'):
+            value = value * 60 + float(part)
+        return value
+    except ValueError:
+        return 0
 
 
 class SortableTableWidgetItem(QTableWidgetItem):

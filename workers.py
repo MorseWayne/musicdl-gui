@@ -1,167 +1,148 @@
-'''
-Function:
-    Worker Threads for MusicdlGUI
-Author:
-    Zhenchao Jin
-WeChat Official Account (微信公众号):
-    Charles的皮卡丘
-'''
-import os
-import requests
+"""Qt workers own and reap isolated, cancellable backend processes."""
+import copy
+import multiprocessing
+import tempfile
+import time
+from collections import deque
+from pathlib import Path
+
 from PyQt5.QtCore import QThread, pyqtSignal
-from musicdl import musicdl
-from musicdl.modules.utils.misc import sanitize_filepath
-from logger import log_info, log_error, log_exception, log_debug
+
+from backend import execute_job, publish_download, safe_error
+
+
+class ProcessJob:
+    def __init__(self, kind, arguments):
+        context = multiprocessing.get_context('spawn')
+        self.connection, child = context.Pipe(duplex=False)
+        self.process = context.Process(target=execute_job, args=(child, kind, arguments), daemon=True)
+        self.started = time.monotonic()
+        try:
+            self.process.start()
+        except BaseException:
+            self.connection.close()
+            self.process.close()
+            raise
+        finally:
+            child.close()
+
+    def receive(self):
+        if self.connection.poll():
+            try:
+                return self.connection.recv()
+            except EOFError:
+                return ('error', '音乐源进程意外退出，请重试或检查依赖版本')
+        if not self.process.is_alive():
+            return ('error', '音乐源进程意外退出，请重试或检查依赖版本')
+        return None
+
+    def close(self):
+        if self.process.is_alive():
+            self.process.terminate()
+        self.process.join(timeout=1)
+        if self.process.is_alive():
+            self.process.kill()
+            self.process.join()
+        self.connection.close()
+        self.process.close()
 
 
 class SearchWorker(QThread):
-    """
-    Background thread for searching music from multiple sources
-    """
-    finished_sig = pyqtSignal(str, list)  # source_name, results_list
-    error_sig = pyqtSignal(str, str)  # source_name, error_msg
-    client_ready_sig = pyqtSignal(object)  # music_client object
+    started_sig = pyqtSignal(str)
+    result_sig = pyqtSignal(str, list, str)
+    error_sig = pyqtSignal(str, str)
 
-    def __init__(self, music_sources, keyword, settings):
-        """
-        Initialize search worker
-        
-        Args:
-            music_sources (list): List of music source names to search
-            keyword (str): Search keyword
-            settings (dict): Application settings including cookies and work directory
-        """
-        super().__init__()
-        self.music_sources = music_sources
+    def __init__(self, music_sources, keyword, settings, parent=None):
+        super().__init__(parent)
+        self.music_sources = list(music_sources)
         self.keyword = keyword
-        self.settings = settings
+        self.settings = copy.deepcopy(settings)
 
     def run(self):
-        """
-        Execute search in background thread
-        Emits finished_sig for successful searches and error_sig for failures
-        """
         try:
-            log_debug(f'SearchWorker 开始执行，关键词: {self.keyword}')
-            # Build config for this specific source
-            init_music_clients_cfg = {}
+            self._run_sources()
+        except Exception as error:
+            # Even failure to create/clean a temp directory must reach the UI;
+            # an exception escaping QThread.run can terminate the application.
             for source in self.music_sources:
-                cookie_data = self.settings.get('cookies', {}).get(source, {})
-                init_music_clients_cfg[source] = {
-                    'work_dir': self.settings.get('work_dir', 'musicdl_outputs'),
-                    'default_search_cookies': cookie_data.get('search', '').strip(),
-                    'default_download_cookies': cookie_data.get('download', '').strip() or cookie_data.get('search', '').strip(),
-                    'max_retries': 1,
-                    'search_size_per_source': 5,
-                    'search_size_per_page': 5,
-                }
-            
-            # Handle Quark sites
-            quark_cookie = self.settings.get('quark_cookies', '').strip()
-            if quark_cookie:
-                quark_sites = ['MituMusicClient', 'GequbaoMusicClient', 'YinyuedaoMusicClient', 'BuguyyMusicClient', 
-                               'JCPOOMusicClient', 'GequhaiMusicClient', 'LivePOOMusicClient', 'KKWSMusicClient', 'FLMP3MusicClient']
-                for site in quark_sites:
-                    if site in self.music_sources:
-                        init_music_clients_cfg[site]['quark_parser_config'] = {'cookies': quark_cookie}
+                self.error_sig.emit(source, safe_error(error))
 
-            client = musicdl.MusicClient(
-                music_sources=self.music_sources, 
-                init_music_clients_cfg=init_music_clients_cfg,
-                requests_overrides={s: {'timeout': (4, 8)} for s in self.music_sources},
-                clients_threadings={s: 3 for s in self.music_sources}
-            )
-            
-            # Emit the music client for download use
-            self.client_ready_sig.emit(client)
-            
-            results = client.search(keyword=self.keyword)
-            
-            for source_name, source_results in results.items():
-                log_debug(f'SearchWorker 源 {source_name} 返回 {len(source_results)} 条结果')
-                self.finished_sig.emit(source_name, source_results)
-            
-            # If some sources didn't return any results (even empty list), they might have failed
-            for source in self.music_sources:
-                if source not in results:
-                    log_error(f'SearchWorker 源 {source} 无响应')
-                    self.error_sig.emit(source, "No response")
-                    
-        except Exception as e:
-            log_exception(f'SearchWorker 执行出错: {str(e)}')
-            for source in self.music_sources:
-                self.error_sig.emit(source, str(e))
+    def _run_sources(self):
+        pending, active = deque(self.music_sources), {}
+        timeout = self.settings.get('search_timeout', 60)
+        with tempfile.TemporaryDirectory(prefix='musicdl-search-') as temporary:
+            try:
+                while pending or active:
+                    if self.isInterruptionRequested():
+                        break
+                    while pending and len(active) < 3:
+                        source = pending.popleft()
+                        try:
+                            active[source] = ProcessJob('search', {
+                                'source': source, 'keyword': self.keyword,
+                                'settings': self.settings, 'work_dir': str(Path(temporary) / source),
+                            })
+                            self.started_sig.emit(source)
+                        except Exception as error:
+                            self.error_sig.emit(source, safe_error(error))
+                    for source, job in list(active.items()):
+                        message = job.receive()
+                        if message is None and time.monotonic() - job.started >= timeout:
+                            message = ('error', f'搜索超过 {timeout} 秒，已停止；可在设置中延长时限或切换音乐源')
+                        if message:
+                            job.close()
+                            del active[source]
+                            if message[0] == 'result':
+                                self.result_sig.emit(source, *message[1])
+                            else:
+                                self.error_sig.emit(source, message[1])
+                    self.msleep(40)
+            except Exception as error:
+                for source in list(active) + list(pending):
+                    self.error_sig.emit(source, safe_error(error))
+            finally:
+                for job in active.values():
+                    job.close()
 
 
 class DownloadWorker(QThread):
-    """
-    Background thread for downloading music files
-    """
-    progress_sig = pyqtSignal(int, str)  # percentage, detailed_text
-    finished_sig = pyqtSignal(bool, str, str)  # success, msg, file_path
+    progress_sig = pyqtSignal(int, str)
+    result_sig = pyqtSignal(bool, str, str)
 
-    def __init__(self, song_info, download_dir, filename, music_client):
-        """
-        Initialize download worker
-        
-        Args:
-            song_info (dict): Song information including download URL and metadata
-            download_dir (str): Directory to save the downloaded file
-            filename (str): Filename for the downloaded file
-            music_client: MusicClient instance for accessing download headers
-        """
-        super().__init__()
-        self.song_info = song_info
-        self.download_dir = download_dir
+    def __init__(self, song_info, download_dir, filename, parent=None):
+        super().__init__(parent)
+        self.song_info = copy.deepcopy(song_info)
+        self.download_dir = Path(download_dir)
         self.filename = filename
-        self.music_client = music_client
 
     def run(self):
-        """
-        Execute download in background thread
-        Emits progress_sig during download and finished_sig when complete
-        """
         try:
-            log_debug(f'DownloadWorker 开始执行，歌曲: {self.song_info.get("song_name", "Unknown")}')
-            download_music_file_path = sanitize_filepath(os.path.join(self.download_dir, self.filename))
-            
-            # Handle duplicate filenames
-            if os.path.exists(download_music_file_path):
-                base_name = os.path.splitext(self.filename)[0]
-                ext = self.song_info['ext']
-                counter = 1
-                while os.path.exists(download_music_file_path):
-                    self.filename = f"{base_name} ({counter}).{ext}"
-                    download_music_file_path = sanitize_filepath(os.path.join(self.download_dir, self.filename))
-                    counter += 1
-
-            headers = self.music_client.music_clients[self.song_info['source']].default_download_headers
-            with requests.get(self.song_info['download_url'], headers=headers, stream=True, verify=False, timeout=60) as resp:
-                if resp.status_code in (200, 206):  # 200 OK or 206 Partial Content
-                    total_size = int(resp.headers.get('content-length', 0))
-                    chunk_size = 1024 * 16  # 16KB chunks
-                    download_size = 0
-                    
-                    with open(download_music_file_path, 'wb') as fp:
-                        for chunk in resp.iter_content(chunk_size=chunk_size):
-                            if not chunk:
-                                continue
-                            fp.write(chunk)
-                            download_size += len(chunk)
-                            
-                            if total_size > 0:
-                                percent = int(download_size / total_size * 100)
-                                detail = f"{download_size/1024/1024:.1f}MB / {total_size/1024/1024:.1f}MB"
-                                self.progress_sig.emit(percent, detail)
+            self.download_dir.mkdir(parents=True, exist_ok=True)
+            # Keep staging on the destination filesystem for atomic publication.
+            with tempfile.TemporaryDirectory(prefix='.musicdl-', dir=self.download_dir) as temporary:
+                staging = str(Path(temporary) / 'audio.part')
+                job = ProcessJob('download', {'song': self.song_info, 'staging_path': staging})
+                try:
+                    while True:
+                        if self.isInterruptionRequested():
+                            self.result_sig.emit(False, '已取消下载', '')
+                            break
+                        if time.monotonic() - job.started > 600:
+                            self.result_sig.emit(False, '下载超过 10 分钟，已停止，请重试', '')
+                            break
+                        message = job.receive()
+                        if message:
+                            if message[0] == 'progress':
+                                self.progress_sig.emit(*message[1:])
+                            elif message[0] == 'result':
+                                path = publish_download(staging, self.download_dir, self.filename)
+                                self.result_sig.emit(True, '下载完成', path)
+                                break
                             else:
-                                detail = f"{download_size/1024/1024:.1f}MB / Unknown"
-                                self.progress_sig.emit(0, detail)
-                    
-                    log_info(f'DownloadWorker 下载完成: {download_music_file_path}')
-                    self.finished_sig.emit(True, f"Finished downloading {self.song_info['song_name']}", download_music_file_path)
-                else:
-                    log_error(f'DownloadWorker 下载失败，状态码: {resp.status_code}')
-                    self.finished_sig.emit(False, f"Download failed with status code: {resp.status_code}", "")
-        except Exception as e:
-            log_exception(f'DownloadWorker 执行出错: {str(e)}')
-            self.finished_sig.emit(False, f"Download error: {str(e)}", "")
+                                self.result_sig.emit(False, message[1], '')
+                                break
+                        self.msleep(40)
+                finally:
+                    job.close()
+        except Exception as error:
+            self.result_sig.emit(False, safe_error(error), '')

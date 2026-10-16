@@ -11,6 +11,7 @@ import sys
 import logging
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from app_config import data_dir
 
 
 # 全局 logger 实例
@@ -25,18 +26,9 @@ def get_log_directory():
     Returns:
         str: 日志目录的绝对路径
     """
-    # 使用应用程序所在目录下的 logs 文件夹
-    if getattr(sys, 'frozen', False):
-        # 打包后的可执行文件
-        app_dir = os.path.dirname(sys.executable)
-    else:
-        # 开发环境
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    log_dir = os.path.join(app_dir, 'logs')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    return log_dir
+    log_dir = data_dir() / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return str(log_dir)
 
 
 def get_log_file_path():
@@ -70,6 +62,7 @@ def setup_logger(log_level=logging.INFO, log_to_console=False, max_bytes=5*1024*
     # 创建 logger
     _logger = logging.getLogger('MusicdlGUI')
     _logger.setLevel(log_level)
+    _logger.propagate = False
     
     # 清除已有的处理器
     _logger.handlers.clear()
@@ -81,19 +74,20 @@ def setup_logger(log_level=logging.INFO, log_to_console=False, max_bytes=5*1024*
     )
     
     # 文件处理器 - 按日期命名，带轮转
-    log_dir = get_log_directory()
-    date_str = datetime.now().strftime('%Y-%m-%d')
-    _log_file_path = os.path.join(log_dir, f'musicdlgui_{date_str}.log')
-    
-    file_handler = RotatingFileHandler(
-        _log_file_path,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
-    _logger.addHandler(file_handler)
+    try:
+        log_dir = get_log_directory()
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        _log_file_path = os.path.join(log_dir, f'musicdlgui_{date_str}.log')
+        file_handler = RotatingFileHandler(
+            _log_file_path, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8'
+        )
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(formatter)
+        _logger.addHandler(file_handler)
+    except OSError:
+        # A read-only installation or unavailable log directory must not prevent startup.
+        _log_file_path = None
+        _logger.addHandler(logging.NullHandler())
     
     # 控制台处理器（可选）
     if log_to_console:

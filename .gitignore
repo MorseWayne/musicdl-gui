@@ -22,6 +22,8 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
+.pytest_cache/
 env/
 ENV/
 
@@ -34,6 +36,7 @@ ENV/
 
 # Settings
 settings.json
+logs/
 
 # Downloaded music files
 musicdl_outputs/

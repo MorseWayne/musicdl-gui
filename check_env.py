@@ -1,178 +1,84 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-依赖检查脚本 - 验证所有必需的包是否已正确安装
-"""
-import sys
+"""Noninteractive environment check and optional, bounded live search probe."""
+import argparse
+import importlib
+import multiprocessing
 import platform
+import sys
+from importlib.metadata import version
+from pathlib import Path
 
-def check_python_version():
-    """检查 Python 版本"""
-    print("=" * 60)
-    print("Python 环境检查")
-    print("=" * 60)
-    version = sys.version_info
-    print(f"Python 版本: {version.major}.{version.minor}.{version.micro}")
-    print(f"平台: {platform.system()} {platform.machine()}")
-    print(f"架构: {'64位' if platform.machine().endswith('64') else '32位'}")
-    
-    if version.major < 3 or (version.major == 3 and version.minor < 6):
-        print("❌ Python 版本过低，需要 Python 3.6 或更高版本")
-        return False
-    else:
-        print("✅ Python 版本满足要求")
-    return True
 
-def check_dependencies():
-    """检查依赖包"""
-    print("\n" + "=" * 60)
-    print("依赖包检查")
-    print("=" * 60)
-    
-    required_packages = {
-        'PyQt5': {
-            'import_name': 'PyQt5',
-            'description': 'GUI 框架',
-            'required': True
-        },
-        'requests': {
-            'import_name': 'requests',
-            'description': 'HTTP 请求库',
-            'required': True
-        },
-        'musicdl': {
-            'import_name': 'musicdl',
-            'description': '音乐下载核心库',
-            'required': True
-        },
-        'PyInstaller': {
-            'import_name': 'PyInstaller',
-            'description': '打包工具（构建时需要）',
-            'required': False
-        },
-        'PIL': {
-            'import_name': 'PIL',
-            'description': '图像处理库（生成图标时需要）',
-            'required': False
-        }
-    }
-    
-    all_ok = True
-    missing_required = []
-    missing_optional = []
-    
-    for name, info in required_packages.items():
+def check_environment():
+    print(f'Python {platform.python_version()} · {platform.system()} {platform.machine()}')
+    ok = sys.version_info >= (3, 10)
+    if not ok:
+        print('需要 Python 3.10+，建议使用 3.11 或 3.12。')
+    for package, module in [('PyQt5', 'PyQt5.QtWidgets'), ('requests', 'requests'), ('musicdl', 'musicdl.modules')]:
         try:
-            module = __import__(info['import_name'])
-            version = getattr(module, '__version__', '未知')
-            status = "✅"
-            desc = info['description']
-            print(f"{status} {name:15s} {version:10s} - {desc}")
-        except ImportError:
-            if info['required']:
-                status = "❌"
-                missing_required.append(name)
-                all_ok = False
-            else:
-                status = "⚠️ "
-                missing_optional.append(name)
-            desc = info['description']
-            print(f"{status} {name:15s} {'未安装':10s} - {desc}")
-    
-    print("\n" + "=" * 60)
-    print("检查结果")
-    print("=" * 60)
-    
-    if missing_required:
-        print(f"\n❌ 缺少必需的依赖包: {', '.join(missing_required)}")
-        print("请运行以下命令安装:")
-        print(f"pip install {' '.join(missing_required)}")
-    
-    if missing_optional:
-        print(f"\n⚠️  缺少可选的依赖包: {', '.join(missing_optional)}")
-        print("这些包不是运行程序必需的，但在某些场景下需要:")
-        if 'PyInstaller' in missing_optional:
-            print("  - PyInstaller: 构建可执行文件时需要")
-        if 'PIL' in missing_optional:
-            print("  - PIL (Pillow): 生成图标时需要")
-        print(f"安装命令: pip install {' '.join(missing_optional)}")
-    
-    if not missing_required:
-        print("\n✅ 所有必需的依赖包都已安装")
-        print("程序可以正常运行！")
-    
-    return all_ok
+            imported = importlib.import_module(module)
+            installed = version(package)
+            if package == 'musicdl':
+                assert callable(imported.BuildMusicClient)
+                assert callable(imported.SongInfo.todict)
+                if installed != '2.14.0':
+                    print(f'警告：musicdl {installed}，本项目验证版本为 2.14.0。')
+            print(f'✓ {package} {installed}')
+        except Exception as error:
+            print(f'✗ {package}: {type(error).__name__}: {error}')
+            ok = False
+    for filename in ('musicdlgui.py', 'workers.py', 'backend.py', 'app_config.py', 'components.py', 'dialogs.py', 'styles.py', 'logger.py'):
+        if not Path(__file__).with_name(filename).is_file():
+            print(f'✗ 缺少文件：{filename}')
+            ok = False
+    print('环境检查通过。' if ok else '请修复以上问题，并运行 python -m pip install -r requirements.txt')
+    return ok
 
-def check_files():
-    """检查关键文件是否存在"""
-    import os
-    
-    print("\n" + "=" * 60)
-    print("文件检查")
-    print("=" * 60)
-    
-    critical_files = [
-        ('musicdlgui.py', '主程序文件', True),
-        ('components.py', '组件模块', True),
-        ('dialogs.py', '对话框模块', True),
-        ('styles.py', '样式模块', True),
-        ('workers.py', '工作线程模块', True),
-        ('requirements.txt', '依赖列表', True),
-        ('build.py', '构建脚本', False),
-        ('musicdlgui.spec', 'PyInstaller 配置', False),
-        ('icon.ico', '应用图标', False),
-    ]
-    
-    all_ok = True
-    for filename, desc, required in critical_files:
-        if os.path.exists(filename):
-            print(f"✅ {filename:20s} - {desc}")
-        else:
-            if required:
-                print(f"❌ {filename:20s} - {desc} (必需)")
-                all_ok = False
-            else:
-                print(f"⚠️  {filename:20s} - {desc} (可选)")
-    
-    return all_ok
+
+def probe_search(args):
+    from PyQt5.QtCore import QCoreApplication
+    from app_config import SOURCES, default_settings
+    from workers import SearchWorker
+
+    sources = args.sources.split(',')
+    unknown = set(sources) - set(SOURCES)
+    if unknown:
+        print(f'不支持的来源：{", ".join(sorted(unknown))}')
+        return 1
+    app = QCoreApplication([])
+    # Never read or print personal cookies during a diagnostic probe.
+    settings = dict(default_settings(), search_timeout=args.timeout, search_limit=args.limit)
+    worker = SearchWorker(sources, args.search, settings)
+    counts = []
+
+    def result(source, songs, warning):
+        counts.append(len(songs))
+        print(f'{SOURCES[source]}：{len(songs)} 首 {warning}', flush=True)
+        for song in songs[:3]:
+            print(f"  {song['song_name']} · {song['singers']} · {song['ext']}", flush=True)
+
+    worker.started_sig.connect(lambda source: print(f'{SOURCES[source]}：开始搜索', flush=True))
+    worker.result_sig.connect(result)
+    worker.error_sig.connect(lambda source, error: print(f'{SOURCES[source]}：失败 — {error}', flush=True))
+    worker.finished.connect(app.quit)
+    worker.start()
+    app.exec_()
+    worker.wait()
+    return 0 if sum(counts) else 2
+
 
 def main():
-    """主函数"""
-    print("\n🔍 MusicdlGUI 环境检查工具\n")
-    
-    # 检查 Python 版本
-    python_ok = check_python_version()
-    
-    # 检查依赖
-    deps_ok = check_dependencies()
-    
-    # 检查文件
-    files_ok = check_files()
-    
-    # 总结
-    print("\n" + "=" * 60)
-    print("总结")
-    print("=" * 60)
-    
-    if python_ok and deps_ok and files_ok:
-        print("\n✅ 所有检查通过！")
-        print("\n你可以:")
-        print("1. 运行程序: python musicdlgui.py")
-        print("2. 构建应用: python build.py x64")
-        return 0
-    else:
-        print("\n❌ 检查未通过，请解决上述问题")
-        print("\n建议:")
-        if not python_ok:
-            print("- 升级 Python 到 3.6 或更高版本")
-        if not deps_ok:
-            print("- 安装缺失的必需依赖: pip install -r requirements.txt")
-        if not files_ok:
-            print("- 确保所有必需的文件都存在")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--search', help='可选：联网搜索关键词，不下载音频、不读取个人 Cookie')
+    parser.add_argument('--sources', default='KuwoMusicClient,MiguMusicClient,NeteaseMusicClient')
+    parser.add_argument('--timeout', type=int, default=60, choices=range(1, 181), metavar='1..180')
+    parser.add_argument('--limit', type=int, default=2, choices=range(1, 31), metavar='1..30')
+    args = parser.parse_args()
+    if not check_environment():
         return 1
+    return probe_search(args) if args.search else 0
+
 
 if __name__ == '__main__':
-    exit_code = main()
-    print("\n按回车键退出...")
-    input()
-    sys.exit(exit_code)
+    multiprocessing.freeze_support()
+    sys.exit(main())

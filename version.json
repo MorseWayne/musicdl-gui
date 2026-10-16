@@ -1,12 +1,23 @@
 {
   "name": "MusicdlGUI",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Music download GUI application based on musicdl",
   "author": "Zhenchao Jin",
   "homepage": "https://github.com/MorseWayne/musicdl-gui",
   "license": "MIT",
-  "python_version": "3.6+",
+  "python_version": "3.10+",
   "release_notes": {
+    "1.1.0": {
+      "date": "2026-10-16",
+      "changes": [
+        "适配并固定 musicdl 2.14.0，修复旧接口引用和搜索错误反馈",
+        "独立音乐源搜索，支持实时结果、超时、取消和失败重试",
+        "修复下载 Cookie、完整性校验、同名文件保护与批量队列",
+        "统一中文交互，增加筛选、逐首状态、快捷键和打开下载目录",
+        "迁移旧设置到用户配置目录，支持安全关闭后台任务",
+        "增加回归测试和 Windows 打包产物冒烟检查"
+      ]
+    },
     "1.0.0": {
       "date": "2026-01-11",
       "changes": [

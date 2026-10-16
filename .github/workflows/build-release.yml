@@ -12,6 +12,7 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
@@ -32,7 +33,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        pip install -r requirements.txt
+        pip install -r requirements.txt pytest
+
+    - name: Run regression tests
+      run: python -m pytest -q
+      env:
+        QT_QPA_PLATFORM: offscreen
+        PYTHONIOENCODING: utf-8
     
     - name: Display Python info
       run: |
@@ -51,14 +58,31 @@ jobs:
         name: MusicdlGUI-Windows-x64
         path: dist/MusicdlGUI-Windows-x64.zip
         retention-days: 30
+
+    - name: Smoke test Windows executable
+      shell: pwsh
+      env:
+        QT_QPA_PLATFORM: offscreen
+      run: |
+        $report = Join-Path $env:RUNNER_TEMP 'musicdl-smoke.json'
+        $process = Start-Process -FilePath 'dist/MusicdlGUI-x64/MusicdlGUI.exe' -ArgumentList @('--smoke-test', $report) -PassThru
+        if (-not $process.WaitForExit(180000)) {
+          Stop-Process -Id $process.Id -Force
+          throw 'Packaged application timed out'
+        }
+        if (-not (Test-Path $report)) { throw 'Packaged application did not produce a smoke report' }
+        Get-Content $report
+        $result = Get-Content $report -Raw | ConvertFrom-Json
+        if ($process.ExitCode -ne 0 -or -not $result.ok) { throw 'Packaged application smoke check failed' }
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: dist/MusicdlGUI-Windows-x64.zip
         draft: false
         prerelease: false
         generate_release_notes: true
+        fail_on_unmatched_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

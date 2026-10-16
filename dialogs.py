@@ -7,13 +7,14 @@ WeChat Official Account (微信公众号):
     Charles的皮卡丘
 '''
 import os
-import subprocess
-import sys
-from PyQt5.QtCore import Qt
+from pathlib import Path
+from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QLineEdit, QPushButton, QRadioButton, 
                              QButtonGroup, QTextEdit, QTabWidget, QWidget, 
-                             QFileDialog, QMessageBox)
+                             QFileDialog, QMessageBox, QSpinBox, QScrollArea)
+from app_config import SOURCES, normalize_settings
 from logger import get_log_directory, get_log_file_path
 
 
@@ -30,15 +31,19 @@ class SettingsDialog(QDialog):
             current_settings (dict): Current application settings
         """
         super(SettingsDialog, self).__init__(parent)
-        self.setWindowTitle('Settings - 设置')
-        self.setMinimumWidth(800)
-        self.setMinimumHeight(600)
+        self.setWindowTitle('设置')
+        self.setMinimumSize(720, 540)
+        self.resize(800, 700)
         self.current_settings = current_settings or {}
         self.init_ui()
     
     def init_ui(self):
         """Initialize user interface"""
-        main_layout = QVBoxLayout()
+        outer_layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
         
@@ -47,6 +52,21 @@ class SettingsDialog(QDialog):
         
         # Download directory section
         self._init_directory_section(main_layout)
+
+        search_group = QGroupBox('搜索设置')
+        search_layout = QHBoxLayout(search_group)
+        self.search_limit = QSpinBox()
+        self.search_limit.setRange(1, 30)
+        self.search_limit.setValue(self.current_settings.get('search_limit', 5))
+        self.search_timeout = QSpinBox()
+        self.search_timeout.setRange(15, 180)
+        self.search_timeout.setSuffix(' 秒')
+        self.search_timeout.setValue(self.current_settings.get('search_timeout', 60))
+        search_layout.addWidget(QLabel('每个来源最多结果'))
+        search_layout.addWidget(self.search_limit)
+        search_layout.addWidget(QLabel('每个来源搜索时限'))
+        search_layout.addWidget(self.search_timeout)
+        main_layout.addWidget(search_group)
         
         # Log section
         self._init_log_section(main_layout)
@@ -55,19 +75,19 @@ class SettingsDialog(QDialog):
         self._init_cookies_section(main_layout)
         
         # Buttons
-        self._init_buttons(main_layout)
-        
-        self.setLayout(main_layout)
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
+        self._init_buttons(outer_layout)
     
     def _init_appearance_section(self, main_layout):
         """Initialize appearance settings section"""
-        appearance_group = QGroupBox('Appearance - 外观设置')
+        appearance_group = QGroupBox('外观')
         appearance_layout = QVBoxLayout()
         appearance_layout.setContentsMargins(15, 20, 15, 15)
         
         self.theme_group = QButtonGroup()
-        self.light_theme_radio = QRadioButton('Light Mode - 浅色模式')
-        self.dark_theme_radio = QRadioButton('Dark Mode - 深色模式')
+        self.light_theme_radio = QRadioButton('浅色模式')
+        self.dark_theme_radio = QRadioButton('深色模式')
         self.theme_group.addButton(self.light_theme_radio, 0)
         self.theme_group.addButton(self.dark_theme_radio, 1)
         
@@ -84,7 +104,7 @@ class SettingsDialog(QDialog):
     
     def _init_directory_section(self, main_layout):
         """Initialize download directory settings section"""
-        dir_group = QGroupBox('Download Directory - 下载目录')
+        dir_group = QGroupBox('下载目录')
         dir_layout = QVBoxLayout()
         dir_layout.setContentsMargins(15, 20, 15, 15)
         dir_layout.setSpacing(10)
@@ -93,22 +113,22 @@ class SettingsDialog(QDialog):
         path_layout = QHBoxLayout()
         path_layout.setSpacing(10)
         self.dir_edit = QLineEdit(self.current_settings.get('work_dir', 'musicdl_outputs'))
-        self.dir_button = QPushButton('Browse - 浏览')
+        self.dir_button = QPushButton('浏览')
         self.dir_button.setMinimumWidth(100)
         self.dir_button.setCursor(Qt.PointingHandCursor)
         self.dir_button.clicked.connect(self.select_directory)
-        path_layout.addWidget(QLabel('Directory - 目录:'))
+        path_layout.addWidget(QLabel('保存到'))
         path_layout.addWidget(self.dir_edit)
         path_layout.addWidget(self.dir_button)
         dir_layout.addLayout(path_layout)
         
         # Directory structure options
-        dir_layout.addWidget(QLabel('Directory Structure - 目录结构:'))
+        dir_layout.addWidget(QLabel('文件组织方式'))
         self.dir_structure_group = QButtonGroup()
         
-        self.flat_radio = QRadioButton('Flat - 扁平结构 (所有音乐直接保存到设置目录)')
-        self.source_radio = QRadioButton('By Source - 按音乐源分类 (在设置目录下按音乐源创建子文件夹)')
-        self.date_radio = QRadioButton('By Date - 按日期分类 (原有结构: 音乐源/日期-关键词/)')
+        self.flat_radio = QRadioButton('平铺（所有音乐直接保存到所选目录）')
+        self.source_radio = QRadioButton('按音乐来源分类（为每个平台创建子文件夹）')
+        self.date_radio = QRadioButton('按日期分类 (音乐源/日期 关键词/)')
         
         self.dir_structure_group.addButton(self.flat_radio, 0)
         self.dir_structure_group.addButton(self.source_radio, 1)
@@ -132,7 +152,7 @@ class SettingsDialog(QDialog):
     
     def _init_log_section(self, main_layout):
         """Initialize log settings section"""
-        log_group = QGroupBox('Log - 日志')
+        log_group = QGroupBox('日志与排查')
         log_layout = QVBoxLayout()
         log_layout.setContentsMargins(15, 20, 15, 15)
         log_layout.setSpacing(10)
@@ -143,13 +163,16 @@ class SettingsDialog(QDialog):
             log_info_label = QLabel(f'当前日志文件: {os.path.basename(log_file)}')
         else:
             log_info_label = QLabel('日志文件: 尚未初始化')
-        log_info_label.setStyleSheet("color: #666666; font-size: 11px;")
+        log_info_label.setObjectName('mutedLabel')
         log_layout.addWidget(log_info_label)
         
         # Log directory info
-        log_dir = get_log_directory()
+        try:
+            log_dir = get_log_directory()
+        except OSError:
+            log_dir = '日志目录不可写'
         log_dir_label = QLabel(f'日志目录: {log_dir}')
-        log_dir_label.setStyleSheet("color: #666666; font-size: 11px;")
+        log_dir_label.setObjectName('mutedLabel')
         log_dir_label.setWordWrap(True)
         log_layout.addWidget(log_dir_label)
         
@@ -157,12 +180,12 @@ class SettingsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
         
-        open_log_dir_btn = QPushButton('Open Log Folder - 打开日志目录')
+        open_log_dir_btn = QPushButton('打开日志目录')
         open_log_dir_btn.setCursor(Qt.PointingHandCursor)
         open_log_dir_btn.clicked.connect(self.open_log_directory)
         btn_layout.addWidget(open_log_dir_btn)
         
-        open_log_file_btn = QPushButton('Open Current Log - 打开当前日志')
+        open_log_file_btn = QPushButton('打开当前日志')
         open_log_file_btn.setCursor(Qt.PointingHandCursor)
         open_log_file_btn.clicked.connect(self.open_log_file)
         btn_layout.addWidget(open_log_file_btn)
@@ -175,14 +198,9 @@ class SettingsDialog(QDialog):
     
     def open_log_directory(self):
         """Open log directory in file explorer"""
-        log_dir = get_log_directory()
         try:
-            if sys.platform == 'win32':
-                os.startfile(log_dir)
-            elif sys.platform == 'darwin':
-                subprocess.run(['open', log_dir])
-            else:
-                subprocess.run(['xdg-open', log_dir])
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(get_log_directory())):
+                raise OSError('系统文件管理器未能打开日志目录')
         except Exception as e:
             QMessageBox.warning(self, 'Warning - 警告', f'无法打开日志目录: {str(e)}')
     
@@ -193,18 +211,14 @@ class SettingsDialog(QDialog):
             QMessageBox.information(self, 'Info - 信息', '日志文件尚未创建')
             return
         try:
-            if sys.platform == 'win32':
-                os.startfile(log_file)
-            elif sys.platform == 'darwin':
-                subprocess.run(['open', log_file])
-            else:
-                subprocess.run(['xdg-open', log_file])
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(log_file)):
+                raise OSError('系统未能打开日志文件')
         except Exception as e:
             QMessageBox.warning(self, 'Warning - 警告', f'无法打开日志文件: {str(e)}')
     
     def _init_cookies_section(self, main_layout):
         """Initialize cookies configuration section"""
-        cookies_group = QGroupBox('Cookies Configuration - Cookies配置 (用于VIP音质)')
+        cookies_group = QGroupBox('平台登录 Cookie（按账号已有权限访问）')
         cookies_layout = QVBoxLayout()
         cookies_layout.setContentsMargins(15, 20, 15, 15)
         
@@ -213,23 +227,13 @@ class SettingsDialog(QDialog):
         
         # Music platform cookies
         self.platform_cookies = {}
-        platforms = [
-            ('QQMusicClient', 'QQ音乐'),
-            ('NeteaseMusicClient', '网易云'),
-            ('KuwoMusicClient', '酷我'),
-            ('MiguMusicClient', '咪咕'),
-            ('KugouMusicClient', '酷狗'),
-            ('QianqianMusicClient', '千千'),
-        ]
+        platforms = SOURCES.items()
         
         for platform_key, platform_name in platforms:
             tab = self._create_platform_tab(platform_key, platform_name)
             self.cookies_tabs.addTab(tab, platform_name)
         
-        # Quark cookies tab
-        quark_tab = self._create_quark_tab()
-        self.cookies_tabs.addTab(quark_tab, '夸克网盘')
-        
+        cookies_layout.addWidget(QLabel('下载 Cookie 留空时沿用搜索 Cookie。修改后请重新搜索。'))
         cookies_layout.addWidget(self.cookies_tabs)
         cookies_group.setLayout(cookies_layout)
         main_layout.addWidget(cookies_group)
@@ -250,25 +254,25 @@ class SettingsDialog(QDialog):
         tab_layout.setSpacing(8)
         
         # Search cookies
-        tab_layout.addWidget(QLabel(f'Search Cookies - 搜索Cookie:'))
+        tab_layout.addWidget(QLabel('搜索 Cookie'))
         search_cookie_edit = QTextEdit()
         search_cookie_edit.setMaximumHeight(80)
         search_cookie_edit.setPlaceholderText('例如: uin=123456; qm_keyst=xxxxx; ...')
-        search_cookie_edit.setText(self.current_settings.get('cookies', {}).get(platform_key, {}).get('search', ''))
+        search_cookie_edit.setPlainText(self.current_settings.get('cookies', {}).get(platform_key, {}).get('search', ''))
         tab_layout.addWidget(search_cookie_edit)
         
         # Download cookies
-        tab_layout.addWidget(QLabel(f'Download Cookies - 下载Cookie:'))
+        tab_layout.addWidget(QLabel('下载 Cookie'))
         download_cookie_edit = QTextEdit()
         download_cookie_edit.setMaximumHeight(80)
-        download_cookie_edit.setPlaceholderText('通常与Search Cookie相同')
-        download_cookie_edit.setText(self.current_settings.get('cookies', {}).get(platform_key, {}).get('download', ''))
+        download_cookie_edit.setPlaceholderText('留空时沿用搜索 Cookie')
+        download_cookie_edit.setPlainText(self.current_settings.get('cookies', {}).get(platform_key, {}).get('download', ''))
         tab_layout.addWidget(download_cookie_edit)
         
         # Copy button
-        copy_btn = QPushButton('Copy Search to Download - 复制搜索Cookie到下载')
+        copy_btn = QPushButton('复制搜索 Cookie 到下载')
         copy_btn.setCursor(Qt.PointingHandCursor)
-        copy_btn.clicked.connect(lambda checked, s=search_cookie_edit, d=download_cookie_edit: d.setText(s.toPlainText()))
+        copy_btn.clicked.connect(lambda checked, s=search_cookie_edit, d=download_cookie_edit: d.setPlainText(s.toPlainText()))
         tab_layout.addWidget(copy_btn)
         
         tab_layout.addStretch()
@@ -281,34 +285,14 @@ class SettingsDialog(QDialog):
         
         return tab
     
-    def _create_quark_tab(self):
-        """
-        Create tab for Quark cloud storage cookies
-        
-        Returns:
-            QWidget: Tab widget
-        """
-        quark_tab = QWidget()
-        quark_layout = QVBoxLayout()
-        quark_layout.setSpacing(10)
-        quark_layout.addWidget(QLabel('夸克网盘Cookie (用于下载分享网站的无损音乐):'))
-        self.quark_cookie_edit = QTextEdit()
-        self.quark_cookie_edit.setPlaceholderText('登录 https://pan.quark.cn/ 后，从浏览器开发者工具获取Cookie')
-        self.quark_cookie_edit.setText(self.current_settings.get('quark_cookies', ''))
-        quark_layout.addWidget(self.quark_cookie_edit)
-        quark_layout.addWidget(QLabel('适用于: 米兔音乐、歌曲宝、音乐岛、布谷音乐等分享网站'))
-        quark_layout.addStretch()
-        quark_tab.setLayout(quark_layout)
-        return quark_tab
-    
     def _init_buttons(self, main_layout):
         """Initialize dialog buttons"""
         button_layout = QHBoxLayout()
         button_layout.setSpacing(15)
-        self.save_button = QPushButton('Save - 保存')
+        self.save_button = QPushButton('保存')
         self.save_button.setObjectName('primaryButton')
         self.save_button.setMinimumWidth(120)
-        self.cancel_button = QPushButton('Cancel - 取消')
+        self.cancel_button = QPushButton('取消')
         self.cancel_button.setMinimumWidth(120)
         self.save_button.setCursor(Qt.PointingHandCursor)
         self.cancel_button.setCursor(Qt.PointingHandCursor)
@@ -327,6 +311,15 @@ class SettingsDialog(QDialog):
     
     def save_settings(self):
         """Save settings and close dialog"""
+        directory = self.dir_edit.text().strip()
+        if not directory:
+            QMessageBox.warning(self, '下载目录为空', '请选择下载保存目录。')
+            self.dir_edit.setFocus()
+            return
+        directory = str(Path(directory).expanduser().resolve())
+        if Path(directory).exists() and not Path(directory).is_dir():
+            QMessageBox.warning(self, '目录无效', '所选路径是文件，请选择文件夹。')
+            return
         # Determine directory structure
         if self.flat_radio.isChecked():
             dir_structure = 'flat'
@@ -336,11 +329,13 @@ class SettingsDialog(QDialog):
             dir_structure = 'date'
         
         self.settings_result = {
-            'work_dir': self.dir_edit.text(),
+            **self.current_settings,
+            'work_dir': directory,
             'dir_structure': dir_structure,
             'is_dark': self.dark_theme_radio.isChecked(),
             'cookies': {},
-            'quark_cookies': self.quark_cookie_edit.toPlainText().strip()
+            'search_limit': self.search_limit.value(),
+            'search_timeout': self.search_timeout.value(),
         }
         
         for platform_key, edits in self.platform_cookies.items():
@@ -352,6 +347,7 @@ class SettingsDialog(QDialog):
                     'download': download_cookie
                 }
         
+        self.settings_result = normalize_settings(self.settings_result)
         self.accept()
     
     def get_settings(self):
