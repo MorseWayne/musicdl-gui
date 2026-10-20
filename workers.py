@@ -9,6 +9,7 @@ from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from backend import execute_job, publish_download, safe_error
+from i18n import language_context, normalize_language, translate as tr
 
 
 class ProcessJob:
@@ -31,9 +32,9 @@ class ProcessJob:
             try:
                 return self.connection.recv()
             except EOFError:
-                return ('error', '音乐源进程意外退出，请重试或检查依赖版本')
+                return ('error', tr('音乐源进程意外退出，请重试或检查依赖版本'))
         if not self.process.is_alive():
-            return ('error', '音乐源进程意外退出，请重试或检查依赖版本')
+            return ('error', tr('音乐源进程意外退出，请重试或检查依赖版本'))
         return None
 
     def close(self):
@@ -59,6 +60,10 @@ class SearchWorker(QThread):
         self.settings = copy.deepcopy(settings)
 
     def run(self):
+        with language_context(self.settings.get('language')):
+            self._run_localized()
+
+    def _run_localized(self):
         try:
             self._run_sources()
         except Exception as error:
@@ -88,7 +93,7 @@ class SearchWorker(QThread):
                     for source, job in list(active.items()):
                         message = job.receive()
                         if message is None and time.monotonic() - job.started >= timeout:
-                            message = ('error', f'搜索超过 {timeout} 秒，已停止；可在设置中延长时限或切换音乐源')
+                            message = ('error', tr('搜索超过 {timeout} 秒，已停止；可在设置中延长时限或切换音乐源', timeout=timeout))
                         if message:
                             job.close()
                             del active[source]
@@ -110,28 +115,33 @@ class DownloadWorker(QThread):
     phase_sig = pyqtSignal(str, str)
     result_sig = pyqtSignal(bool, str, str)
 
-    def __init__(self, song_info, download_dir, filename, parent=None, output_format='original'):
+    def __init__(self, song_info, download_dir, filename, parent=None, output_format='original', language='zh_CN'):
         super().__init__(parent)
         self.song_info = copy.deepcopy(song_info)
         self.download_dir = Path(download_dir)
         self.filename = filename
         self.output_format = output_format
+        self.language = normalize_language(language)
 
     def run(self):
+        with language_context(self.language):
+            self._run_localized()
+
+    def _run_localized(self):
         try:
             self.download_dir.mkdir(parents=True, exist_ok=True)
             # Keep staging on the destination filesystem for atomic publication.
             with tempfile.TemporaryDirectory(prefix='.musicdl-', dir=self.download_dir) as temporary:
                 staging = str(Path(temporary) / 'audio.part')
                 job = ProcessJob('download', {'song': self.song_info, 'staging_path': staging,
-                                              'output_format': self.output_format})
+                                              'output_format': self.output_format, 'language': self.language})
                 try:
                     while True:
                         if self.isInterruptionRequested():
-                            self.result_sig.emit(False, '已取消下载', '')
+                            self.result_sig.emit(False, tr('已取消下载'), '')
                             break
                         if time.monotonic() - job.started > 600:
-                            self.result_sig.emit(False, '下载或转换超过 10 分钟，已停止，请重试', '')
+                            self.result_sig.emit(False, tr('下载或转换超过 10 分钟，已停止，请重试'), '')
                             break
                         message = job.receive()
                         if message:
@@ -142,7 +152,7 @@ class DownloadWorker(QThread):
                             elif message[0] == 'result':
                                 filename = self.filename if self.output_format == 'original' else str(Path(self.filename).with_suffix('.' + self.output_format))
                                 path = publish_download(message[1], self.download_dir, filename)
-                                self.result_sig.emit(True, '下载完成', path)
+                                self.result_sig.emit(True, tr('下载完成'), path)
                                 break
                             else:
                                 self.result_sig.emit(False, message[1], '')

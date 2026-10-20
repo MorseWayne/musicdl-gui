@@ -161,3 +161,49 @@ def test_numeric_sorting():
     assert size_value('1.5 GiB') == 1.5 * 1024 ** 3
     assert duration_value('01:02:03') == 3723
     assert duration_value(None) == size_value(None) == 0
+
+
+def test_switching_language_preserves_results_filter_selection_and_status(window):
+    window.append_results([song('中文歌名'), song('Another song')])
+    record_id = next(iter(window.music_records))
+    window.results_table.item(1, 0).setCheckState(Qt.Checked)
+    window.set_download_status(record_id, '已下载', '/music/song.mp3')
+    window.filter_edit.setText('中文')
+    selected = window.selected_ids()
+    window.settings['language'] = 'en_US'
+    window.apply_language()
+    assert window.selected_ids() == selected
+    assert window.results_table.rowCount() == 2
+    assert window.filter_edit.text() == '中文'
+    assert window.music_records[record_id]['song_name'] == '中文歌名'
+    assert 'Results: 2' in window.results_count.text()
+    assert window.results_table.item(1, 8).text() == 'Downloaded'
+    assert window.results_table.item(1, 7).text() == 'QQ Music'
+    assert 'QQ Music' in [box.text() for box in window.check_boxes]
+    window.settings['language'] = 'zh_CN'
+    window.apply_language()
+    assert window.results_table.item(1, 8).text() == '已下载'
+    assert window.selected_ids() == selected
+
+
+def test_english_search_states_and_download_completion(window, wait_until):
+    window.settings['language'] = 'en_US'
+    window.apply_language()
+    window.lineedit_keyword.setText('music')
+    window.search()
+    worker = window.search_worker
+    worker.result_sig.emit('QQMusicClient', [song('Track', downloaded_contents=b'ID3audio')], '')
+    worker.error_sig.emit('KuwoMusicClient', 'HTTP 403')
+    worker.result_sig.emit('MiguMusicClient', [], '')
+    worker.finished.emit()
+    assert 'failed sources: 1' in window.search_summary.text()
+    assert 'QQ Music · Tracks: 1' in window.source_status_labels['QQMusicClient'].text()
+    assert 'Kuwo Music: HTTP 403' in window.search_errors.toPlainText()
+    window.start_downloads(list(window.music_records))
+    wait_until(lambda: window.download_worker is None)
+    assert window.label_progress_detail.text() == 'Succeeded 1/1'
+    assert window.results_table.item(0, 8).text() == 'Downloaded'
+    window.settings['language'] = 'zh_CN'
+    window.apply_language()
+    assert window.label_progress_detail.text() == '成功 1/1'
+    assert '下载完成' in window.label_task_info.text()

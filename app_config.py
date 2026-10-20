@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QStandardPaths
 from audio_conversion import OUTPUT_FORMATS
+from i18n import normalize_language, translate
 
 
 SOURCES = {
@@ -40,6 +41,7 @@ def default_settings():
         'dir_structure': 'flat',
         'output_format': 'original',
         'is_dark': False,
+        'language': 'zh_CN',
         'cookies': {},
         'quark_cookies': '',
         'selected_sources': list(DEFAULT_SOURCES),
@@ -61,6 +63,7 @@ def normalize_settings(raw, base_dir=None):
     if isinstance(raw.get('output_format'), str) and raw['output_format'] in OUTPUT_FORMATS:
         settings['output_format'] = raw['output_format']
     settings['is_dark'] = raw.get('is_dark') is True
+    settings['language'] = normalize_language(raw.get('language'))
     for key, low, high in [('search_limit', 1, 30), ('search_timeout', 15, 180)]:
         value = raw.get(key)
         if type(value) is int:
@@ -88,12 +91,12 @@ def load_settings(path=None, legacy_path=None):
     try:
         settings = normalize_settings(json.loads(source.read_text(encoding='utf-8')), source.parent)
     except (OSError, ValueError) as error:
-        return default_settings(), f'无法读取设置，已使用默认值；原文件保留在 {source}（{type(error).__name__}）'
+        return default_settings(), translate('无法读取设置，已使用默认值；原文件保留在 {path}（{error}）', path=source, error=type(error).__name__)
     if source != path:
         try:
             save_settings(settings, path)
         except OSError:
-            return settings, f'已读取原设置，但无法迁移到 {path}，请检查目录权限。'
+            return settings, translate('已读取原设置，但无法迁移到 {path}，请检查目录权限。', settings['language'], path=path)
     return settings, ''
 
 

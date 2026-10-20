@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import requests
 from audio_conversion import OUTPUT_FORMATS, convert_audio
+from i18n import language_context, translate as tr
 
 
 class BackendError(Exception):
@@ -20,18 +21,19 @@ class BackendError(Exception):
 def safe_error(error):
     """Keep credentials and signed URLs out of the UI and application logs."""
     if isinstance(error, requests.exceptions.ProxyError):
-        return '无法连接代理，请检查系统代理设置'
+        return tr('无法连接代理，请检查系统代理设置')
     if isinstance(error, requests.exceptions.SSLError):
-        return 'HTTPS 证书验证失败，请检查系统时间、证书或代理'
+        return tr('HTTPS 证书验证失败，请检查系统时间、证书或代理')
     if isinstance(error, requests.exceptions.Timeout):
-        return '网络请求超时，请重试或切换音乐源'
+        return tr('网络请求超时，请重试或切换音乐源')
     if isinstance(error, requests.exceptions.ConnectionError):
-        return '网络连接失败，请检查网络或切换音乐源'
+        return tr('网络连接失败，请检查网络或切换音乐源')
     if isinstance(error, requests.exceptions.HTTPError):
-        code = error.response.status_code if error.response is not None else '未知'
-        return f'平台返回 HTTP {code}，请重试；登录失效时请更新 Cookie'
-    message = re.sub(r'https?://\S+', '[链接已隐藏]', str(error))
-    message = re.sub(r'(?i)(cookie|authorization|token|key)\s*[:=].*', r'\1=[已隐藏]', message)
+        code = error.response.status_code if error.response is not None else tr('未知')
+        return tr('平台返回 HTTP {code}，请重试；登录失效时请更新 Cookie', code=code)
+    message = re.sub(r'https?://\S+', tr('[链接已隐藏]'), str(error))
+    message = re.sub(r'(?i)(cookie|authorization|token|key)\s*[:=].*',
+                     lambda match: match.group(1) + '=' + tr('[已隐藏]'), message)
     return (message or type(error).__name__).replace('\n', ' ')[:350]
 
 
@@ -107,7 +109,7 @@ def search_source(source, keyword, settings, work_dir):
             records.append(record)
     if not records and logger.errors:
         raise BackendError(logger.errors[-1])
-    warning = '部分请求失败，已保留可用结果' if logger.errors else ''
+    warning = tr('部分请求失败，已保留可用结果') if logger.errors else ''
     return records[:limit], warning
 
 
@@ -129,7 +131,7 @@ def song_filename(song):
 def download_song(song, staging_path, report):
     """Write a complete HTTP audio file to staging, never to its final name."""
     if str(song.get('protocol') or 'HTTP').upper() != 'HTTP':
-        raise BackendError('此结果不是直链音频，请选择同一歌曲的其他结果')
+        raise BackendError(tr('此结果不是直链音频，请选择同一歌曲的其他结果'))
     contents = song.get('downloaded_contents')
     if isinstance(contents, bytes) and contents:
         Path(staging_path).write_bytes(contents)
@@ -137,17 +139,17 @@ def download_song(song, staging_path, report):
         return
     url = song.get('download_url')
     if not isinstance(url, str) or urlsplit(url).scheme not in ('http', 'https'):
-        raise BackendError('没有可用下载地址，请重新搜索')
+        raise BackendError(tr('没有可用下载地址，请重新搜索'))
     headers = dict(song.get('default_download_headers') or {})
     headers['Accept-Encoding'] = 'identity'
     with requests.get(url, headers=headers, cookies=song.get('default_download_cookies') or {},
                       timeout=(5, 15), stream=True) as response:
         response.raise_for_status()
         if response.status_code != 200:
-            raise BackendError(f'下载响应不完整（HTTP {response.status_code}），请重新搜索')
+            raise BackendError(tr('下载响应不完整（HTTP {code}），请重新搜索', code=response.status_code))
         content_type = response.headers.get('Content-Type', '').lower()
         if any(kind in content_type for kind in ('text/', 'json', 'xml', 'mpegurl')):
-            raise BackendError('平台返回了网页或错误信息，下载链接可能已过期，请重新搜索')
+            raise BackendError(tr('平台返回了网页或错误信息，下载链接可能已过期，请重新搜索'))
         total = int(response.headers.get('Content-Length') or 0)
         if response.headers.get('Content-Encoding', 'identity') != 'identity':
             total = 0
@@ -157,7 +159,7 @@ def download_song(song, staging_path, report):
                 if not chunk:
                     continue
                 if downloaded == 0 and chunk.lstrip().lower().startswith((b'<!doctype', b'<html', b'<?xml', b'{', b'[')):
-                    raise BackendError('下载地址返回了错误页面，请重新搜索')
+                    raise BackendError(tr('下载地址返回了错误页面，请重新搜索'))
                 output.write(chunk)
                 downloaded += len(chunk)
                 if time.monotonic() - last_report >= 0.1:
@@ -169,7 +171,7 @@ def download_song(song, staging_path, report):
             output.flush()
             os.fsync(output.fileno())
         if not downloaded or (total and downloaded != total):
-            raise BackendError('音频文件为空或传输不完整，请重试')
+            raise BackendError(tr('音频文件为空或传输不完整，请重试'))
     report(100, f'{downloaded / 1048576:.1f} MB')
 
 
@@ -198,13 +200,13 @@ def publish_download(staging_path, directory, filename):
 def prepare_download(song, staging_path, output_format, report, phase):
     """Download and optionally convert; only return a fully prepared file."""
     if output_format not in OUTPUT_FORMATS:
-        raise BackendError('不支持的保存格式，请重新选择')
-    phase('download', '正在下载')
+        raise BackendError(tr('不支持的保存格式，请重新选择'))
+    phase('download', tr('正在下载'))
     download_song(song, staging_path, report)
     if output_format == 'original':
         return staging_path
-    phase('convert', f'正在转换为 {output_format.upper()}')
-    report(-1, '正在读取音频…')
+    phase('convert', tr('正在转换为 {format}', format=output_format.upper()))
+    report(-1, tr('正在读取音频…'))
     try:
         return convert_audio(staging_path, str(Path(staging_path).with_suffix('.' + output_format)),
                              output_format, report, {
@@ -212,13 +214,20 @@ def prepare_download(song, staging_path, output_format, report, phase):
                                  'album': song.get('album'),
                              })
     except ImportError as error:
-        raise BackendError('无法加载音频转换组件，请重新安装完整依赖或使用完整安装包') from error
+        raise BackendError(tr('无法加载音频转换组件，请重新安装完整依赖或使用完整安装包')) from error
     except Exception as error:
-        raise BackendError(f'转换为 {output_format.upper()} 失败：{safe_error(error)}') from error
+        raise BackendError(tr('转换为 {format} 失败：{error}', format=output_format.upper(), error=safe_error(error))) from error
 
 
 def execute_job(connection, kind, arguments):
     """Spawn entry point: no Qt widgets or live clients cross processes."""
+    arguments = dict(arguments)
+    language = arguments.pop('language', arguments.get('settings', {}).get('language', 'zh_CN'))
+    with language_context(language):
+        _execute_job(connection, kind, arguments)
+
+
+def _execute_job(connection, kind, arguments):
     try:
         if kind == 'search':
             result = search_source(**arguments)

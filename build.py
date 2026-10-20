@@ -131,6 +131,11 @@ def create_release_package(architecture='x64'):
 运行方式：
 双击 MusicdlGUI.exe 即可启动程序
 
+语言 / Language:
+设置 / Settings → 语言 / Language → English 或 简体中文 → Save / 保存
+To use English, open Settings, choose English under Language, then click Save.
+The interface changes immediately and remembers your choice.
+
 首次使用：
 1. 选择音乐平台（建议选择 2-3 个）
 2. 输入搜索关键词

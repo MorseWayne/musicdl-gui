@@ -13,7 +13,7 @@
 [![musicdl 2.14.0](https://img.shields.io/badge/musicdl-2.14.0-3299ED)](https://github.com/CharlesPikachu/musicdl)
 [![License MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-[快速开始](#快速开始) · [功能一览](#功能一览) · [界面预览](#界面预览) · [使用指南](#使用指南) · [常见问题](#常见问题)
+[快速开始](#快速开始) · [功能一览](#功能一览) · [界面预览](#界面预览) · [English UI](#interface-language) · [使用指南](#使用指南) · [常见问题](#常见问题)
 
 </div>
 
@@ -33,7 +33,7 @@
 | **保存为你需要的格式** | 保留原格式，或在下载后自动转换为 WAV / MP3，无需另外安装 FFmpeg 命令。 |
 | **文件有序保存** | 支持平铺、按来源、按来源/日期和关键词分类；同名文件自动编号，避免覆盖。 |
 | **任务进展看得见** | 各来源有独立状态与错误提示，支持超时、取消、失败重试和日志排查。 |
-| **按自己的习惯使用** | 浅色与深色主题、快捷键、可配置搜索数量和时限，以及按平台设置的 Cookie。 |
+| **按自己的习惯使用** | 简体中文与 English 界面、浅色与深色主题、快捷键、可配置搜索数量和时限，以及按平台设置的 Cookie。 |
 
 默认选择 **酷我、咪咕、网易云**，最多同时搜索三个来源；每个来源默认最多 5 首、60 秒时限，可在设置中调整。平台可用性会受网络、登录状态和上游接口变化影响。
 
@@ -96,6 +96,23 @@ Linux 需要可用的图形桌面与 Qt 系统运行库。如果报 `xcb` 插件
 可在 [Releases](https://github.com/MorseWayne/musicdl-gui/releases) 查看已发布的安装包。旧版安装包内置的音乐源接口可能已失效；更新仓库不会更新旧的 exe。需要当前功能时，请从源码运行，或按 [Windows 构建指南](BUILD.md) 重新构建。
 
 ## 使用指南
+
+<a id="interface-language"></a>
+
+### 切换语言 / Interface language
+
+点击右上角 **设置 / Settings**，在设置页顶部的 **语言 / Language** 中选择 **English** 或 **简体中文**，然后点击 **Save / 保存**。设置页可即时预览语言，保存后主界面立即切换，无需重启；已有搜索结果和勾选状态会保留，下次启动沿用所选语言。取消设置不会改变主界面的语言。
+
+**English:** Open **Settings (设置 / Settings)** → **Language (语言 / Language)** → **English** → **Save**. The interface switches immediately and remembers your choice for the next launch. Song titles, artist names and other platform metadata stay as provided by the music source.
+
+此功能需要包含语言切换功能的新版本。旧 exe 不会随仓库更新，请从当前源码运行或重新构建。
+
+<details>
+<summary>English interface preview (offline example data)</summary>
+
+![MusicdlGUI English interface with search results and batch download controls](resource/screenshot-english.png)
+
+</details>
 
 ### 三步保存喜欢的音乐
 
@@ -180,6 +197,7 @@ Qt 测试使用 offscreen 模式，不需要显示器；联网平台可用性由
 | [audio_conversion.py](audio_conversion.py) | 流式音频转换 |
 | [workers.py](workers.py) | 限时子进程与后台任务 |
 | [app_config.py](app_config.py) | 设置存储、迁移与用户目录 |
+| [i18n.py](i18n.py) | 中英文界面文案、即时切换与后台任务语言 |
 
 Windows 构建与打包验收见 [BUILD.md](BUILD.md)。源码测试不代表 Windows 打包产物已经验收。
 

@@ -2,6 +2,7 @@
 import time
 from itertools import chain
 from pathlib import Path
+from i18n import translate as tr
 
 
 OUTPUT_FORMATS = {
@@ -14,21 +15,21 @@ OUTPUT_FORMATS = {
 def convert_audio(source_path, target_path, output_format, report, metadata=None):
     """Return the completed staging file; same-format audio is left untouched."""
     if output_format not in ('wav', 'mp3'):
-        raise ValueError('不支持的目标格式')
+        raise ValueError(tr('不支持的目标格式'))
     import av
 
     with av.open(str(source_path)) as source:
         if not source.streams.audio:
-            raise ValueError('下载的文件中没有音频')
+            raise ValueError(tr('下载的文件中没有音频'))
         stream = source.streams.audio[0]
         frames = source.decode(stream)
         first = next(frames, None)
         if first is None or not first.samples:
-            raise ValueError('音频为空或无法解码')
+            raise ValueError(tr('音频为空或无法解码'))
         # Inspect real content instead of trusting the provider's extension.
         if output_format in source.format.name.split(','):
             if output_format == 'mp3' or stream.codec_context.name.startswith('pcm_'):
-                report(100, f'已是 {output_format.upper()}，保留原音频')
+                report(100, tr('已是 {format}，保留原音频', format=output_format.upper()))
                 return str(source_path)
 
         rate, layout = first.sample_rate, first.layout
@@ -43,7 +44,7 @@ def convert_audio(source_path, target_path, output_format, report, metadata=None
                 's64': 'pcm_s64le', 'flt': 'pcm_f32le', 'dbl': 'pcm_f64le',
             }.get(sample_format)
             if codec is None:
-                raise ValueError(f'不支持的音频采样格式：{sample_format}')
+                raise ValueError(tr('不支持的音频采样格式：{format}', format=sample_format))
 
         duration = float(stream.duration * stream.time_base) if stream.duration is not None and stream.time_base else None
         if not duration and source.duration:
@@ -69,7 +70,8 @@ def convert_audio(source_path, target_path, output_format, report, metadata=None
                         target.mux(packet)
                 if time.monotonic() - last_report >= 0.1:
                     percent = min(99, int(elapsed * 100 / duration)) if duration else -1
-                    report(percent, f'正在转换为 {output_format.upper()} · 已处理 {elapsed:.1f} 秒音频')
+                    report(percent, tr('正在转换为 {format} · 已处理 {seconds:.1f} 秒音频',
+                                       format=output_format.upper(), seconds=elapsed))
                     last_report = time.monotonic()
             for converted in resampler.resample(None):
                 for packet in output.encode(converted):
@@ -80,6 +82,7 @@ def convert_audio(source_path, target_path, output_format, report, metadata=None
     # Validate the actual encoder output before the worker publishes the file.
     with av.open(str(target_path)) as result:
         if not result.streams.audio or next(result.decode(audio=0), None) is None:
-            raise ValueError('转换结果没有可播放的音频')
-    report(100, f'{output_format.upper()} 转换完成 · {Path(target_path).stat().st_size / 1048576:.1f} MB')
+            raise ValueError(tr('转换结果没有可播放的音频'))
+    report(100, tr('{format} 转换完成 · {size:.1f} MB', format=output_format.upper(),
+                   size=Path(target_path).stat().st_size / 1048576))
     return str(target_path)

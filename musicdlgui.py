@@ -23,6 +23,7 @@ from dialogs import SettingsDialog
 from logger import setup_logger, log_app_start, log_app_exit, log_info, log_error
 from styles import get_stylesheet
 from workers import SearchWorker, DownloadWorker
+from i18n import Text, Translator
 
 
 class MusicdlGUI(QWidget):
@@ -33,12 +34,14 @@ class MusicdlGUI(QWidget):
         setup_logger()
         log_app_start()
         self.settings, warning = app_config.load_settings()
+        self.i18n = Translator(self.settings.get('language'))
         self.is_dark = self.settings['is_dark']
         self.search_worker = None
         self.download_worker = None
         self.music_records = {}
         self.source_states = {}
         self.source_status_labels = {}
+        self.source_errors = {}
         self.failed_sources = set()
         self.failed_downloads = set()
         self.download_queue = deque()
@@ -47,7 +50,7 @@ class MusicdlGUI(QWidget):
         self._closing = False
         self._search_cancelled = False
         self._download_cancelled = False
-        self.setWindowTitle('MusicdlGUI · 音乐搜索与下载')
+        self.i18n.bind(self, 'MusicdlGUI · 音乐搜索与下载', method='setWindowTitle')
         icon = Path(__file__).with_name('icon.ico')
         if icon.exists():
             self.setWindowIcon(QIcon(str(icon)))
@@ -56,7 +59,7 @@ class MusicdlGUI(QWidget):
         self.setStyleSheet(get_stylesheet(self.is_dark))
         self.init_ui()
         if warning:
-            self.label_task_info.setText(warning)
+            self.i18n.bind(self.label_task_info, warning)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -66,19 +69,19 @@ class MusicdlGUI(QWidget):
         title = QLabel('MusicdlGUI')
         title.setObjectName('appTitle')
         header.addWidget(title)
-        header.addWidget(QLabel('搜索音乐，收藏喜欢的声音'))
+        header.addWidget(self.i18n.bind(QLabel(''), '搜索音乐，收藏喜欢的声音'))
         header.addStretch()
-        self.button_theme = QPushButton('切换主题', clicked=self.toggle_theme)
-        self.button_settings = QPushButton('设置', clicked=self.open_settings)
+        self.button_theme = self.i18n.bind(QPushButton('', clicked=self.toggle_theme), '切换主题')
+        self.button_settings = self.i18n.bind(QPushButton('', clicked=self.open_settings), '设置 / Settings')
         header.addWidget(self.button_theme)
         header.addWidget(self.button_settings)
         layout.addLayout(header)
 
-        engines = QGroupBox('音乐来源')
+        engines = self.i18n.bind(QGroupBox(''), '音乐来源', method='setTitle')
         engine_layout = QHBoxLayout(engines)
         self.check_boxes = []
         for source, name in app_config.SOURCES.items():
-            checkbox = QCheckBox(name)
+            checkbox = self.i18n.bind(QCheckBox(), name)
             checkbox.setProperty('client_name', source)
             checkbox.setChecked(source in self.settings['selected_sources'])
             checkbox.toggled.connect(self.remember_sources)
@@ -88,20 +91,20 @@ class MusicdlGUI(QWidget):
 
         search_row = QHBoxLayout()
         self.lineedit_keyword = QLineEdit()
-        self.lineedit_keyword.setPlaceholderText('输入歌名、歌手或专辑，按 Enter 搜索')
+        self.i18n.bind(self.lineedit_keyword, '输入歌名、歌手或专辑，按 Enter 搜索', method='setPlaceholderText')
         self.lineedit_keyword.setClearButtonEnabled(True)
         self.lineedit_keyword.returnPressed.connect(self.search)
-        self.button_keyword = QPushButton('搜索', clicked=self.search)
+        self.button_keyword = self.i18n.bind(QPushButton('', clicked=self.search), '搜索')
         self.button_keyword.setObjectName('button_keyword')
         self.button_keyword.setMinimumWidth(110)
         search_row.addWidget(self.lineedit_keyword)
         search_row.addWidget(self.button_keyword)
         layout.addLayout(search_row)
-        self.search_summary = QLabel('选择音乐来源，开始第一次搜索。')
+        self.search_summary = self.i18n.bind(QLabel(''), '选择音乐来源，开始第一次搜索。')
         self.search_summary.setWordWrap(True)
         layout.addWidget(self.search_summary)
 
-        self.status_group = QGroupBox('各来源搜索状态')
+        self.status_group = self.i18n.bind(QGroupBox(''), '各来源搜索状态', method='setTitle')
         self.status_grid = QGridLayout(self.status_group)
         self.status_group.hide()
         layout.addWidget(self.status_group)
@@ -113,14 +116,14 @@ class MusicdlGUI(QWidget):
         layout.addWidget(self.search_errors)
 
         actions = QHBoxLayout()
-        self.btn_select_all = QPushButton('全选可见结果', clicked=self.select_all_rows)
-        self.btn_deselect_all = QPushButton('清空选择', clicked=self.deselect_all_rows)
-        self.btn_download_selected = QPushButton('下载选中', clicked=self.download_selected)
+        self.btn_select_all = self.i18n.bind(QPushButton('', clicked=self.select_all_rows), '全选可见结果')
+        self.btn_deselect_all = self.i18n.bind(QPushButton('', clicked=self.deselect_all_rows), '清空选择')
+        self.btn_download_selected = self.i18n.bind(QPushButton('', clicked=self.download_selected), '下载选中')
         self.btn_download_selected.setObjectName('primaryButton')
-        self.btn_retry_search = QPushButton('重试失败来源', clicked=self.retry_search)
+        self.btn_retry_search = self.i18n.bind(QPushButton('', clicked=self.retry_search), '重试失败来源')
         self.btn_retry_search.hide()
         self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText('筛选当前结果')
+        self.i18n.bind(self.filter_edit, '筛选当前结果', method='setPlaceholderText')
         self.filter_edit.setClearButtonEnabled(True)
         self.filter_edit.textChanged.connect(self.filter_results)
         for widget in (self.btn_select_all, self.btn_deselect_all, self.btn_download_selected, self.btn_retry_search):
@@ -131,6 +134,12 @@ class MusicdlGUI(QWidget):
 
         self.results_table = QTableWidget(0, 9)
         self.results_table.setHorizontalHeaderLabels(['选择', '歌曲', '歌手', '专辑', '时长', '大小', '源格式', '来源', '下载状态'])
+        # Keep Python wrappers for headers created internally by Qt alive.
+        self._header_items = []
+        for column in range(self.results_table.columnCount()):
+            item = self.results_table.horizontalHeaderItem(column)
+            self._header_items.append(item)
+            self.i18n.bind(item, item.text())
         table_header = self.results_table.horizontalHeader()
         table_header.setSectionResizeMode(QHeaderView.ResizeToContents)
         for column in (1, 2, 3):
@@ -149,19 +158,19 @@ class MusicdlGUI(QWidget):
         self.results_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.results_table.customContextMenuRequested.connect(self.show_context_menu)
         layout.addWidget(self.results_table, 1)
-        self.results_count = QLabel('暂无结果')
+        self.results_count = self.i18n.bind(QLabel(''), '暂无结果')
         layout.addWidget(self.results_count)
 
-        self.label_task_info = QLabel('勾选歌曲后点击“下载选中”，也可以右键下载。')
+        self.label_task_info = self.i18n.bind(QLabel(''), '勾选歌曲后点击“下载选中”，也可以右键下载。')
         self.label_task_info.setWordWrap(True)
         self.label_task_info.setTextFormat(Qt.PlainText)
         layout.addWidget(self.label_task_info)
         progress = QHBoxLayout()
         self.bar_download = QProgressBar()
         self.bar_download.setValue(0)
-        self.label_progress_detail = QLabel('等待下载')
-        self.btn_cancel_download = QPushButton('取消下载', clicked=self.cancel_download)
-        self.btn_retry_download = QPushButton('重试失败下载', clicked=self.retry_downloads)
+        self.label_progress_detail = self.i18n.bind(QLabel(''), '等待下载')
+        self.btn_cancel_download = self.i18n.bind(QPushButton('', clicked=self.cancel_download), '取消下载')
+        self.btn_retry_download = self.i18n.bind(QPushButton('', clicked=self.retry_downloads), '重试失败下载')
         self.btn_retry_download.hide()
         progress.addWidget(self.bar_download, 1)
         progress.addWidget(self.label_progress_detail)
@@ -173,15 +182,17 @@ class MusicdlGUI(QWidget):
         self.status_label.setObjectName('mutedLabel')
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label, 1)
-        footer.addWidget(QLabel('保存格式'))
+        footer.addWidget(self.i18n.bind(QLabel(''), '保存格式'))
         self.output_format_combo = QComboBox()
         for value, label in OUTPUT_FORMATS.items():
             self.output_format_combo.addItem(label, value)
+            self.i18n.bind(self.output_format_combo, label, method='setItemText',
+                           args=(self.output_format_combo.count() - 1,))
         self.output_format_combo.setCurrentIndex(self.output_format_combo.findData(self.settings['output_format']))
-        self.output_format_combo.setToolTip('下载后自动转换，仅保存目标文件。MP3 转换使用 320 kbps；已是该格式时保留原音频。')
+        self.i18n.bind(self.output_format_combo, '下载后自动转换，仅保存目标文件。MP3 转换使用 320 kbps；已是该格式时保留原音频。', method='setToolTip')
         self.output_format_combo.currentIndexChanged.connect(self.change_output_format)
         footer.addWidget(self.output_format_combo)
-        footer.addWidget(QPushButton('打开下载目录', clicked=self.open_download_directory))
+        footer.addWidget(self.i18n.bind(QPushButton('', clicked=self.open_download_directory), '打开下载目录'))
         layout.addLayout(footer)
         QShortcut('Ctrl+L', self, activated=self.lineedit_keyword.setFocus)
         QShortcut('Escape', self, activated=self.cancel_active)
@@ -195,7 +206,7 @@ class MusicdlGUI(QWidget):
             return True
         except OSError as error:
             log_error(f'保存设置失败: {error}')
-            self.label_task_info.setText(f'无法保存设置：{error}')
+            self.i18n.bind(self.label_task_info, '无法保存设置：{error}', error=error)
             return False
 
     def remember_sources(self):
@@ -212,14 +223,26 @@ class MusicdlGUI(QWidget):
         dialog = SettingsDialog(self, self.settings)
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
+            self.apply_language()
             self.output_format_combo.blockSignals(True)
             self.output_format_combo.setCurrentIndex(self.output_format_combo.findData(self.settings['output_format']))
             self.output_format_combo.blockSignals(False)
             self.is_dark = self.settings['is_dark']
             self.setStyleSheet(get_stylesheet(self.is_dark))
             if self.persist_settings():
-                self.label_task_info.setText('设置已保存。Cookie 修改将在下一次搜索时生效。')
+                self.i18n.bind(self.label_task_info, '设置已保存。Cookie 修改将在下一次搜索时生效。')
             self.update_directory_label()
+
+    def apply_language(self):
+        # Translating table items may trigger sorting and selection signals.
+        self.results_table.blockSignals(True)
+        self.results_table.setSortingEnabled(False)
+        self.i18n.set_language(self.settings.get('language'))
+        self.results_table.setSortingEnabled(True)
+        self.results_table.blockSignals(False)
+        self.update_directory_label()
+        self.update_search_errors()
+        self.filter_results()
 
     def change_output_format(self):
         self.settings['output_format'] = self.output_format_combo.currentData()
@@ -227,16 +250,17 @@ class MusicdlGUI(QWidget):
 
     def update_directory_label(self):
         structure = {'flat': '平铺', 'source': '按来源', 'date': '按日期和关键词'}[self.settings['dir_structure']]
-        self.status_label.setText(f"保存到 {self.settings['work_dir']} · {structure}")
+        self.i18n.bind(self.status_label, '保存到 {directory} · {structure}',
+                       directory=self.settings['work_dir'], structure=Text(structure))
 
     def open_download_directory(self):
         try:
             path = Path(self.settings['work_dir'])
             path.mkdir(parents=True, exist_ok=True)
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
-                raise OSError('系统文件管理器未能打开目录')
+                raise OSError(self.i18n('系统文件管理器未能打开目录'))
         except OSError as error:
-            self.label_task_info.setText(f'无法打开目录：{error}')
+            self.i18n.bind(self.label_task_info, '无法打开目录：{error}', error=error)
 
     def search(self):
         if self.search_worker is not None:
@@ -247,7 +271,7 @@ class MusicdlGUI(QWidget):
         keyword = self.lineedit_keyword.text().strip()
         sources = [box.property('client_name') for box in self.check_boxes if box.isChecked()]
         if not keyword or not sources:
-            self.search_summary.setText('请输入搜索关键词。' if not keyword else '请至少选择一个音乐来源。')
+            self.i18n.bind(self.search_summary, '请输入搜索关键词。' if not keyword else '请至少选择一个音乐来源。')
             self.lineedit_keyword.setFocus()
             return
         self.search_keyword = keyword
@@ -256,6 +280,7 @@ class MusicdlGUI(QWidget):
         self.failed_downloads.clear()
         self.failed_sources.clear()
         self.source_states.clear()
+        self.source_errors.clear()
         self.filter_edit.clear()
         while self.status_grid.count():
             self.status_grid.takeAt(0).widget().deleteLater()
@@ -272,10 +297,10 @@ class MusicdlGUI(QWidget):
         self._search_cancelled = False
         for source in sources:
             self.failed_sources.discard(source)
+            self.source_errors.pop(source, None)
             self.set_source_status(source, 'pending', '等待搜索')
-        self.search_errors.clear()
-        self.search_errors.hide()
-        self.search_summary.setText(f'正在搜索“{self.search_keyword}”… 可用结果会陆续显示。')
+        self.update_search_errors()
+        self.i18n.bind(self.search_summary, '正在搜索“{keyword}”… 可用结果会陆续显示。', keyword=self.search_keyword)
         self.search_worker = SearchWorker(sources, self.search_keyword, self.settings, self)
         self.search_worker.started_sig.connect(self.source_started)
         self.search_worker.result_sig.connect(self.source_result)
@@ -289,23 +314,33 @@ class MusicdlGUI(QWidget):
 
     def set_source_status(self, source, state, message):
         self.source_states[source] = state
-        self.source_status_labels[source].setText(f'{app_config.SOURCES[source]} · {message}')
+        self.i18n.bind(self.source_status_labels[source], '{source} · {message}',
+                       source=Text(app_config.SOURCES[source]),
+                       message=message if isinstance(message, Text) else Text(message))
 
     def source_result(self, source, records, warning):
-        message = f'{len(records)} 首' if records else '未找到可下载歌曲'
-        self.set_source_status(source, 'success', message + ('（部分失败）' if warning else ''))
+        message = Text('{count} 首', {'count': len(records)}) if records else Text('未找到可下载歌曲')
+        self.set_source_status(source, 'success', Text('{message}{warning}', {
+            'message': message, 'warning': Text('（部分失败）') if warning else '',
+        }))
         self.source_status_labels[source].setToolTip(warning)
         self.append_results(records)
-        self.search_summary.setText(f'已找到 {len(self.music_records)} 首，正在等待其他来源…')
+        self.i18n.bind(self.search_summary, '已找到 {count} 首，正在等待其他来源…', count=len(self.music_records))
         log_info(f'{source}: {len(records)} 条结果 {warning}')
 
     def source_error(self, source, message):
         self.failed_sources.add(source)
         self.set_source_status(source, 'error', '搜索失败')
         self.source_status_labels[source].setToolTip(message)
-        self.search_errors.appendPlainText(f'{app_config.SOURCES[source]}：{message}')
-        self.search_errors.show()
+        self.source_errors[source] = message
+        self.update_search_errors()
         log_error(f'{source}: {message}')
+
+    def update_search_errors(self):
+        self.search_errors.setPlainText('\n'.join(
+            f'{self.i18n(app_config.SOURCES[source])}: {message}'
+            for source, message in self.source_errors.items()))
+        self.search_errors.setVisible(bool(self.source_errors))
 
     def search_finished(self):
         worker, self.search_worker = self.search_worker, None
@@ -316,21 +351,21 @@ class MusicdlGUI(QWidget):
                 self.failed_sources.add(source)
         count = len(self.music_records)
         if self._search_cancelled:
-            message = f'搜索已取消，保留 {count} 首可用结果。'
+            message = '搜索已取消，保留 {count} 首可用结果。'
         elif self.failed_sources:
-            message = f'找到 {count} 首，{len(self.failed_sources)} 个来源失败。可重试失败来源，或查看下方原因。'
+            message = '找到 {count} 首，{failed} 个来源失败。可重试失败来源，或查看下方原因。'
         elif count:
-            message = f'找到 {count} 首。勾选后下载，可按列排序或筛选结果。'
+            message = '找到 {count} 首。勾选后下载，可按列排序或筛选结果。'
         else:
             message = '没有找到可下载歌曲。请换关键词或音乐来源；需要登录的平台可在设置中更新 Cookie。'
-        self.search_summary.setText(message)
+        self.i18n.bind(self.search_summary, message, count=count, failed=len(self.failed_sources))
         self.update_actions()
 
     def cancel_search(self):
         if self.search_worker is not None:
             self._search_cancelled = True
             self.search_worker.requestInterruption()
-            self.button_keyword.setText('正在取消…')
+            self.i18n.bind(self.button_keyword, '正在取消…')
             self.button_keyword.setEnabled(False)
 
     def retry_search(self):
@@ -361,6 +396,9 @@ class MusicdlGUI(QWidget):
             for column, (text, sort_value) in enumerate(values, 1):
                 item = SortableTableWidgetItem(text, sort_value)
                 item.setToolTip(text)
+                if column in (7, self.STATUS_COLUMN):
+                    self.i18n.bind(item, text)
+                    self.i18n.bind(item, text, method='setToolTip')
                 self.results_table.setItem(row, column, item)
         self.results_table.blockSignals(False)
         self.results_table.setSortingEnabled(True)
@@ -374,7 +412,8 @@ class MusicdlGUI(QWidget):
             hidden = keyword not in text
             self.results_table.setRowHidden(row, hidden)
             visible += not hidden
-        self.results_count.setText(f'{len(self.music_records)} 首结果 · 当前显示 {visible} 首')
+        self.i18n.bind(self.results_count, '{total} 首结果 · 当前显示 {visible} 首',
+                       total=len(self.music_records), visible=visible)
         self.update_actions()
 
     def selected_ids(self):
@@ -393,7 +432,7 @@ class MusicdlGUI(QWidget):
         searching = self.search_worker is not None
         downloading = self.download_worker is not None
         selected = self.selected_ids()
-        self.btn_download_selected.setText(f'下载选中（{len(selected)}）' if selected else '下载选中')
+        self.i18n.bind(self.btn_download_selected, '下载选中（{count}）' if selected else '下载选中', count=len(selected))
         self.btn_download_selected.setEnabled(bool(selected) and not downloading)
         self.btn_select_all.setEnabled(bool(self.music_records))
         self.btn_deselect_all.setEnabled(bool(self.music_records))
@@ -404,7 +443,7 @@ class MusicdlGUI(QWidget):
         self.btn_cancel_download.setEnabled(downloading and not self._download_cancelled)
         self.button_settings.setEnabled(not searching and not downloading)
         self.output_format_combo.setEnabled(not downloading)
-        self.button_keyword.setText('取消搜索' if searching else '搜索')
+        self.i18n.bind(self.button_keyword, '取消搜索' if searching else '搜索')
         self.button_keyword.setEnabled((not downloading or searching) and not (searching and self._search_cancelled))
         self.lineedit_keyword.setEnabled(not searching and not downloading)
         for box in self.check_boxes:
@@ -432,7 +471,7 @@ class MusicdlGUI(QWidget):
             return
         record_id = self.results_table.item(item.row(), 0).data(Qt.UserRole)
         menu = QMenu(self)
-        action = menu.addAction('下载这首歌曲')
+        action = menu.addAction(self.i18n('下载这首歌曲'))
         action.setEnabled(self.download_worker is None)
         if menu.exec_(self.results_table.viewport().mapToGlobal(position)) == action:
             self.start_downloads([record_id])
@@ -448,9 +487,9 @@ class MusicdlGUI(QWidget):
             if self.results_table.item(row, 0).data(Qt.UserRole) == record_id:
                 item = self.results_table.item(row, self.STATUS_COLUMN)
                 # Update tooltip before text because sorting can move the row.
-                item.setToolTip(detail or status)
+                self.i18n.bind(item, detail or status, method='setToolTip')
                 item.sort_value = status
-                item.setText(status)
+                self.i18n.bind(item, status)
                 break
 
     def start_downloads(self, record_ids):
@@ -475,13 +514,16 @@ class MusicdlGUI(QWidget):
             directory /= safe_filename(song['source'])
         if self.settings['dir_structure'] == 'date':
             directory /= safe_filename(f"{song['_date']} {song['_keyword']}")
-        self._download_result = (False, '下载进程未返回结果', '')
+        self._download_result = (False, self.i18n('下载进程未返回结果'), '')
         self.set_download_status(self.active_record, '下载中')
-        self.label_task_info.setText(f"正在下载 {self.batch_completed + 1}/{self.batch_total}：{song['song_name']} · {song['singers']}")
+        self.i18n.bind(self.label_task_info, '正在下载 {current}/{total}：{song} · {artist}',
+                       current=self.batch_completed + 1, total=self.batch_total,
+                       song=song['song_name'], artist=song['singers'])
         self.bar_download.setRange(0, 0)
-        self.label_progress_detail.setText('正在连接…')
+        self.i18n.bind(self.label_progress_detail, '正在连接…')
         self.download_worker = DownloadWorker(song, str(directory), song_filename(song), self,
-                                              output_format=self.batch_output_format)
+                                              output_format=self.batch_output_format,
+                                              language=self.settings.get('language'))
         self.download_worker.progress_sig.connect(self.download_progress)
         self.download_worker.phase_sig.connect(self.download_phase)
         self.download_worker.result_sig.connect(self.download_result)
@@ -494,14 +536,16 @@ class MusicdlGUI(QWidget):
             return
         song = self.music_records[self.active_record]
         self.set_download_status(self.active_record, '转换中' if phase == 'convert' else '下载中')
-        self.label_task_info.setText(f"{detail} {self.batch_completed + 1}/{self.batch_total}：{song['song_name']} · {song['singers']}")
+        self.i18n.bind(self.label_task_info, '{detail} {current}/{total}: {song} · {artist}',
+                       detail=detail, current=self.batch_completed + 1, total=self.batch_total,
+                       song=song['song_name'], artist=song['singers'])
         self.bar_download.setRange(0, 0)
 
     def download_progress(self, percent, detail):
         self.bar_download.setRange(0, 0 if percent < 0 else 100)
         if percent >= 0:
             self.bar_download.setValue(percent)
-        self.label_progress_detail.setText(detail)
+        self.i18n.bind(self.label_progress_detail, detail)
 
     def download_result(self, success, message, path):
         self._download_result = success, message, path
@@ -530,15 +574,17 @@ class MusicdlGUI(QWidget):
             return
         self.bar_download.setRange(0, 100)
         self.bar_download.setValue(100 if self.batch_success == self.batch_total else 0)
-        self.label_progress_detail.setText(f'成功 {self.batch_success}/{self.batch_total}')
-        message = ('下载已取消' if self._download_cancelled else '下载完成') + f' · 成功 {self.batch_success}/{self.batch_total} 首'
+        self.i18n.bind(self.label_progress_detail, '成功 {success}/{total}', success=self.batch_success, total=self.batch_total)
+        details, more = '', ''
         if self.batch_errors:
-            message += '\n' + '\n'.join(self.batch_errors[:3])
+            details = '\n' + '\n'.join(self.batch_errors[:3])
             if len(self.batch_errors) > 3:
-                message += '\n其余失败原因可在“下载状态”列悬停查看。'
+                more = Text('\n{message}', {'message': Text('其余失败原因可在“下载状态”列悬停查看。')})
         elif success:
-            message += f' · {path}'
-        self.label_task_info.setText(message)
+            details = f' · {path}'
+        self.i18n.bind(self.label_task_info, '{message} · 成功 {success}/{total} 首{details}{more}',
+                       message=Text('下载已取消' if self._download_cancelled else '下载完成'),
+                       success=self.batch_success, total=self.batch_total, details=details, more=more)
         self.update_actions()
 
     def cancel_download(self):
@@ -548,7 +594,7 @@ class MusicdlGUI(QWidget):
                 self.set_download_status(record_id, '已取消')
             self.download_queue.clear()
             self.download_worker.requestInterruption()
-            self.label_task_info.setText('正在取消下载并清理临时文件…')
+            self.i18n.bind(self.label_task_info, '正在取消下载并清理临时文件…')
             self.update_actions()
 
     def cancel_active(self):

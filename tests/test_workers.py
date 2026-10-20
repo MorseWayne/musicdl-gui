@@ -78,6 +78,43 @@ def test_real_download_process_publishes_only_complete_file(tmp_path, wait_until
     assert len(list(tmp_path.iterdir())) == 1
 
 
+def test_spawned_download_errors_use_each_workers_language(tmp_path, wait_until):
+    english = DownloadWorker({}, str(tmp_path / 'english'), 'track.mp3', language='en_US')
+    chinese = DownloadWorker({}, str(tmp_path / 'chinese'), 'track.mp3')
+    errors = {}
+    english.result_sig.connect(lambda success, message, path: errors.update(english=message))
+    chinese.result_sig.connect(lambda success, message, path: errors.update(chinese=message))
+    english.start()
+    chinese.start()
+    wait_until(lambda: not english.isRunning() and not chinese.isRunning())
+    assert errors['english'] == 'No download URL is available. Search again.'
+    assert errors['chinese'] == '没有可用下载地址，请重新搜索'
+
+
+def test_english_conversion_progress_from_spawned_process(tmp_path, wait_until, flac_audio):
+    worker = DownloadWorker({'downloaded_contents': flac_audio[0]}, str(tmp_path), 'track.flac',
+                            output_format='wav', language='en_US')
+    progress, phases, results = [], [], []
+    worker.progress_sig.connect(lambda percent, detail: progress.append(detail))
+    worker.phase_sig.connect(lambda phase, detail: phases.append(detail))
+    worker.result_sig.connect(lambda *args: results.append(args))
+    worker.start()
+    wait_until(lambda: not worker.isRunning())
+    assert results[0][0]
+    assert phases == ['Downloading', 'Converting to WAV']
+    assert any('WAV conversion complete' in detail for detail in progress)
+
+
+def test_english_search_timeout(monkeypatch, wait_until):
+    monkeypatch.setattr(workers, 'execute_job', hanging_job)
+    worker = SearchWorker(['slow'], 'test', {'search_timeout': 1, 'language': 'en_US'})
+    errors = []
+    worker.error_sig.connect(lambda source, message: errors.append(message))
+    worker.start()
+    wait_until(lambda: not worker.isRunning())
+    assert 'Search stopped after 1 s.' in errors[0]
+
+
 def test_cancel_download_cleans_staging(monkeypatch, tmp_path, wait_until):
     monkeypatch.setattr(workers, 'execute_job', hanging_job)
     worker = DownloadWorker({}, str(tmp_path), 'track.mp3')

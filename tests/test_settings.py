@@ -65,3 +65,19 @@ def test_failed_migration_still_uses_legacy_preferences(monkeypatch, tmp_path):
 def test_output_format_is_validated_and_old_settings_keep_original(value, expected):
     assert app_config.normalize_settings({'output_format': value})['output_format'] == expected
     assert app_config.normalize_settings({})['output_format'] == 'original'
+
+
+@pytest.mark.parametrize('value,expected', [('en_US', 'en_US'), ('zh_CN', 'zh_CN'), ('fr', 'zh_CN'),
+                                           (None, 'zh_CN'), ([], 'zh_CN')])
+def test_language_validation_and_backward_compatibility(value, expected):
+    assert app_config.normalize_settings({'language': value})['language'] == expected
+    assert app_config.normalize_settings({})['language'] == 'zh_CN'
+
+
+def test_legacy_language_is_preserved_on_migration(tmp_path):
+    legacy = tmp_path / 'legacy.json'
+    legacy.write_text('{"language":"en_US","search_limit":8}')
+    settings, warning = app_config.load_settings(tmp_path / 'new.json', legacy)
+    assert not warning
+    assert settings['language'] == 'en_US'
+    assert settings['search_limit'] == 8
