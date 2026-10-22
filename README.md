@@ -2,6 +2,8 @@
 
 # MusicdlGUI
 
+**简体中文** | [English](README.en.md)
+
 **搜索音乐，收藏喜欢的声音。**
 
 一个基于 [musicdl](https://github.com/CharlesPikachu/musicdl) 与 PyQt5 的音乐搜索、下载桌面工具。
@@ -12,6 +14,7 @@
 [![PyQt5 5.15.11](https://img.shields.io/badge/PyQt5-5.15.11-41CD52?logo=qt&logoColor=white)](requirements.txt)
 [![musicdl 2.14.0](https://img.shields.io/badge/musicdl-2.14.0-3299ED)](https://github.com/CharlesPikachu/musicdl)
 [![License MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![v1.3.0](https://img.shields.io/badge/release-v1.3.0-3299ED)](https://github.com/MorseWayne/musicdl-gui/releases/tag/v1.3.0)
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [界面预览](#界面预览) · [English UI](#interface-language) · [使用指南](#使用指南) · [常见问题](#常见问题)
 
@@ -55,6 +58,14 @@
 </details>
 
 ## 快速开始
+
+### Windows 直接运行
+
+从 [v1.3.0 发布页](https://github.com/MorseWayne/musicdl-gui/releases/tag/v1.3.0) 下载 `MusicdlGUI-Windows-x64.zip`，**完整解压**后运行 `MusicdlGUI.exe`。无需安装 Python 或 FFmpeg。当前官方发布包为 Windows x64，未提供已验证的 x86、macOS 或 Linux 安装包；macOS / Linux 可尝试下方的源码运行方式。
+
+发布页同时提供 `SHA256SUMS.txt`。可用 PowerShell 的 `Get-FileHash .\MusicdlGUI-Windows-x64.zip -Algorithm SHA256` 与其中的哈希核对。升级时使用新目录解压，用户配置和已有下载目录会保留。
+
+首次使用见[快速开始指南](QUICKSTART.md)，本次变更见[更新日志](CHANGELOG.md)。
 
 ### 从源码运行
 
@@ -105,7 +116,7 @@ Linux 需要可用的图形桌面与 Qt 系统运行库。如果报 `xcb` 插件
 
 **English:** Open **Settings (设置 / Settings)** → **Language (语言 / Language)** → **English** → **Save**. The interface switches immediately and remembers your choice for the next launch. Song titles, artist names and other platform metadata stay as provided by the music source.
 
-此功能需要包含语言切换功能的新版本。旧 exe 不会随仓库更新，请从当前源码运行或重新构建。
+v1.3.0 已包含语言切换功能。旧 exe 不会随仓库更新，请下载新版发布包、从当前源码运行或重新构建。
 
 <details>
 <summary>English interface preview (offline example data)</summary>
@@ -192,12 +203,12 @@ Qt 测试使用 offscreen 模式，不需要显示器；联网平台可用性由
 
 | 模块 | 职责 |
 | --- | --- |
-| [musicdlgui.py](musicdlgui.py) | 主界面、结果选择与下载队列 |
-| [backend.py](backend.py) | 音乐平台适配与文件传输 |
-| [audio_conversion.py](audio_conversion.py) | 流式音频转换 |
-| [workers.py](workers.py) | 限时子进程与后台任务 |
-| [app_config.py](app_config.py) | 设置存储、迁移与用户目录 |
-| [i18n.py](i18n.py) | 中英文界面文案、即时切换与后台任务语言 |
+| `musicdlgui.py` | 主界面、结果选择与下载队列 |
+| `backend.py` | 音乐平台适配与文件传输 |
+| `audio_conversion.py` | 流式音频转换 |
+| `workers.py` | 限时子进程与后台任务 |
+| `app_config.py` | 设置存储、迁移与用户目录 |
+| `i18n.py` | 中英文界面文案、即时切换与后台任务语言 |
 
 Windows 构建与打包验收见 [BUILD.md](BUILD.md)。源码测试不代表 Windows 打包产物已经验收。
 
